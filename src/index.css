@@ -154,3 +154,62 @@ All colors MUST be HSL.
     transform: translateY(0);
   }
 }
+
+@keyframes neon-pulse {
+  0%, 100% {
+    opacity: 0.4;
+    filter: brightness(1.5) saturate(1.5);
+  }
+  50% {
+    opacity: 0.8;
+    filter: brightness(2.5) saturate(2);
+  }
+}
+
+@keyframes neon-flicker {
+  0%, 100% {
+    opacity: 0.6;
+  }
+  10% {
+    opacity: 0.3;
+  }
+  20% {
+    opacity: 0.8;
+  }
+  30% {
+    opacity: 0.4;
+  }
+  40%, 60% {
+    opacity: 0.7;
+  }
+  70% {
+    opacity: 0.5;
+  }
+  80% {
+    opacity: 0.9;
+  }
+}
+
+@keyframes color-shift {
+  0%, 100% {
+    filter: hue-rotate(0deg) brightness(1.5);
+  }
+  25% {
+    filter: hue-rotate(90deg) brightness(2);
+  }
+  50% {
+    filter: hue-rotate(180deg) brightness(1.8);
+  }
+  75% {
+    filter: hue-rotate(270deg) brightness(2.2);
+  }
+}
+
+@keyframes glitch-scan {
+  0%, 100% {
+    transform: translateY(-100%);
+  }
+  50% {
+    transform: translateY(100%);
+  }
+}
