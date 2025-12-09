@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { 
@@ -25,6 +25,12 @@ interface Window {
   content: React.ReactNode;
 }
 
+interface IconPosition {
+  id: string;
+  x: number;
+  y: number;
+}
+
 // Wallpaper themes for different users
 const wallpaperThemes = [
   { name: "aurora", colors: ["hsl(180, 100%, 30%)", "hsl(280, 100%, 25%)", "hsl(200, 100%, 40%)", "hsl(320, 80%, 30%)"] },
@@ -37,16 +43,16 @@ const wallpaperThemes = [
 
 // Icon styling for realistic macOS/Windows style icons
 const iconStyles: Record<string, { bg: string; iconColor: string; shadow: string }> = {
-  files: { bg: "linear-gradient(145deg, #5AC8FA 0%, #007AFF 100%)", iconColor: "text-white", shadow: "0 8px 24px rgba(0, 122, 255, 0.4)" },
-  "code-editor": { bg: "linear-gradient(145deg, #5856D6 0%, #AF52DE 100%)", iconColor: "text-white", shadow: "0 8px 24px rgba(88, 86, 214, 0.4)" },
-  terminal: { bg: "linear-gradient(145deg, #1C1C1E 0%, #2C2C2E 100%)", iconColor: "text-green-400", shadow: "0 8px 24px rgba(0, 0, 0, 0.5)" },
-  browser: { bg: "linear-gradient(145deg, #34AADC 0%, #5856D6 100%)", iconColor: "text-white", shadow: "0 8px 24px rgba(52, 170, 220, 0.4)" },
-  notes: { bg: "linear-gradient(145deg, #FFCC00 0%, #FF9500 100%)", iconColor: "text-amber-900", shadow: "0 8px 24px rgba(255, 149, 0, 0.4)" },
-  music: { bg: "linear-gradient(145deg, #FF2D55 0%, #FF3B30 100%)", iconColor: "text-white", shadow: "0 8px 24px rgba(255, 45, 85, 0.4)" },
-  chat: { bg: "linear-gradient(145deg, #34C759 0%, #30D158 100%)", iconColor: "text-white", shadow: "0 8px 24px rgba(52, 199, 89, 0.4)" },
-  calculator: { bg: "linear-gradient(145deg, #48484A 0%, #1C1C1E 100%)", iconColor: "text-orange-400", shadow: "0 8px 24px rgba(0, 0, 0, 0.5)" },
-  photos: { bg: "linear-gradient(145deg, #FF9500 0%, #FF2D55 50%, #AF52DE 100%)", iconColor: "text-white", shadow: "0 8px 24px rgba(175, 82, 222, 0.4)" },
-  settings: { bg: "linear-gradient(145deg, #8E8E93 0%, #636366 100%)", iconColor: "text-white", shadow: "0 8px 24px rgba(99, 99, 102, 0.4)" },
+  files: { bg: "linear-gradient(145deg, #5AC8FA 0%, #007AFF 100%)", iconColor: "text-white", shadow: "0 4px 12px rgba(0, 122, 255, 0.4)" },
+  "code-editor": { bg: "linear-gradient(145deg, #5856D6 0%, #AF52DE 100%)", iconColor: "text-white", shadow: "0 4px 12px rgba(88, 86, 214, 0.4)" },
+  terminal: { bg: "linear-gradient(145deg, #1C1C1E 0%, #2C2C2E 100%)", iconColor: "text-green-400", shadow: "0 4px 12px rgba(0, 0, 0, 0.5)" },
+  browser: { bg: "linear-gradient(145deg, #34AADC 0%, #5856D6 100%)", iconColor: "text-white", shadow: "0 4px 12px rgba(52, 170, 220, 0.4)" },
+  notes: { bg: "linear-gradient(145deg, #FFCC00 0%, #FF9500 100%)", iconColor: "text-amber-900", shadow: "0 4px 12px rgba(255, 149, 0, 0.4)" },
+  music: { bg: "linear-gradient(145deg, #FF2D55 0%, #FF3B30 100%)", iconColor: "text-white", shadow: "0 4px 12px rgba(255, 45, 85, 0.4)" },
+  chat: { bg: "linear-gradient(145deg, #34C759 0%, #30D158 100%)", iconColor: "text-white", shadow: "0 4px 12px rgba(52, 199, 89, 0.4)" },
+  calculator: { bg: "linear-gradient(145deg, #48484A 0%, #1C1C1E 100%)", iconColor: "text-orange-400", shadow: "0 4px 12px rgba(0, 0, 0, 0.5)" },
+  photos: { bg: "linear-gradient(145deg, #FF9500 0%, #FF2D55 50%, #AF52DE 100%)", iconColor: "text-white", shadow: "0 4px 12px rgba(175, 82, 222, 0.4)" },
+  settings: { bg: "linear-gradient(145deg, #8E8E93 0%, #636366 100%)", iconColor: "text-white", shadow: "0 4px 12px rgba(99, 99, 102, 0.4)" },
 };
 
 const desktopIcons = [
@@ -68,6 +74,21 @@ const Desktop = () => {
   const [time, setTime] = useState(new Date());
   const [user, setUser] = useState<any>(null);
   const [wallpaper, setWallpaper] = useState(wallpaperThemes[0]);
+  
+  // Dragging state for windows
+  const [draggingWindow, setDraggingWindow] = useState<string | null>(null);
+  const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
+  
+  // Icon positions and dragging
+  const [iconPositions, setIconPositions] = useState<IconPosition[]>(() => 
+    desktopIcons.map((icon, index) => ({
+      id: icon.id,
+      x: 24,
+      y: 24 + index * 80,
+    }))
+  );
+  const [draggingIcon, setDraggingIcon] = useState<string | null>(null);
+  const [iconDragOffset, setIconDragOffset] = useState({ x: 0, y: 0 });
   const navigate = useNavigate();
 
   // Set random wallpaper based on user ID for consistency
@@ -103,6 +124,45 @@ const Desktop = () => {
     const interval = setInterval(() => setTime(new Date()), 1000);
     return () => clearInterval(interval);
   }, []);
+
+  // Window dragging handlers
+  const handleWindowMouseDown = (e: React.MouseEvent, windowId: string, windowPos: { x: number; y: number }) => {
+    if ((e.target as HTMLElement).closest('button')) return;
+    setDraggingWindow(windowId);
+    setDragOffset({ x: e.clientX - windowPos.x, y: e.clientY - windowPos.y });
+    setActiveWindow(windowId);
+  };
+
+  const handleMouseMove = (e: React.MouseEvent) => {
+    if (draggingWindow) {
+      const newX = Math.max(0, e.clientX - dragOffset.x);
+      const newY = Math.max(0, e.clientY - dragOffset.y);
+      setWindows(prev => prev.map(w => 
+        w.id === draggingWindow ? { ...w, position: { x: newX, y: newY } } : w
+      ));
+    }
+    if (draggingIcon) {
+      const newX = Math.max(0, e.clientX - iconDragOffset.x);
+      const newY = Math.max(0, Math.min(window.innerHeight - 100, e.clientY - iconDragOffset.y));
+      setIconPositions(prev => prev.map(icon => 
+        icon.id === draggingIcon ? { ...icon, x: newX, y: newY } : icon
+      ));
+    }
+  };
+
+  const handleMouseUp = () => {
+    setDraggingWindow(null);
+    setDraggingIcon(null);
+  };
+
+  // Icon dragging handlers
+  const handleIconMouseDown = (e: React.MouseEvent, iconId: string) => {
+    const pos = iconPositions.find(p => p.id === iconId);
+    if (pos) {
+      setDraggingIcon(iconId);
+      setIconDragOffset({ x: e.clientX - pos.x, y: e.clientY - pos.y });
+    }
+  };
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
@@ -222,7 +282,12 @@ const Desktop = () => {
   if (!user) return null;
 
   return (
-    <div className="h-screen w-screen overflow-hidden relative">
+    <div 
+      className="h-screen w-screen overflow-hidden relative select-none"
+      onMouseMove={handleMouseMove}
+      onMouseUp={handleMouseUp}
+      onMouseLeave={handleMouseUp}
+    >
       {/* Live Animated Wallpaper */}
       <div 
         className="absolute inset-0 transition-all duration-1000"
@@ -285,24 +350,26 @@ const Desktop = () => {
         }}
       />
 
-      {/* Desktop Icons - Realistic macOS/iOS style */}
-      <div className="absolute top-6 left-6 grid grid-cols-1 gap-4 z-10">
-        {desktopIcons.map(({ id, name, icon: Icon }) => {
-          const style = iconStyles[id] || { bg: "linear-gradient(145deg, #5856D6, #AF52DE)", iconColor: "text-white", shadow: "0 8px 24px rgba(88, 86, 214, 0.4)" };
-          return (
-            <button
-              key={id}
-              onClick={() => openWindow(id, name, <Icon className="w-4 h-4" />)}
-              className="group flex flex-col items-center gap-2 p-2 rounded-xl hover:bg-white/10 transition-all duration-200"
-            >
+      {/* Desktop Icons - Smaller and movable */}
+      {desktopIcons.map(({ id, name, icon: Icon }) => {
+        const style = iconStyles[id] || { bg: "linear-gradient(145deg, #5856D6, #AF52DE)", iconColor: "text-white", shadow: "0 4px 12px rgba(88, 86, 214, 0.4)" };
+        const pos = iconPositions.find(p => p.id === id) || { x: 24, y: 24 };
+        return (
+          <div
+            key={id}
+            className={`absolute z-10 ${draggingIcon === id ? 'cursor-grabbing' : 'cursor-grab'}`}
+            style={{ left: pos.x, top: pos.y }}
+            onMouseDown={(e) => handleIconMouseDown(e, id)}
+            onDoubleClick={() => openWindow(id, name, <Icon className="w-3 h-3" />)}
+          >
+            <div className="group flex flex-col items-center gap-1 p-1.5 rounded-lg hover:bg-white/10 transition-all duration-200">
               <div 
-                className="w-16 h-16 rounded-[18px] flex items-center justify-center group-hover:scale-105 transition-all duration-300 relative overflow-hidden"
+                className="w-11 h-11 rounded-xl flex items-center justify-center group-hover:scale-105 transition-all duration-300 relative overflow-hidden"
                 style={{ 
                   background: style.bg,
                   boxShadow: `${style.shadow}, inset 0 1px 0 rgba(255, 255, 255, 0.25), inset 0 -1px 0 rgba(0, 0, 0, 0.1)`
                 }}
               >
-                {/* Glossy highlight overlay */}
                 <div 
                   className="absolute inset-0 pointer-events-none"
                   style={{
@@ -310,55 +377,60 @@ const Desktop = () => {
                     borderRadius: "inherit"
                   }}
                 />
-                <Icon className={`w-8 h-8 ${style.iconColor} drop-shadow-md relative z-10`} strokeWidth={1.5} />
+                <Icon className={`w-5 h-5 ${style.iconColor} drop-shadow-md relative z-10`} strokeWidth={1.5} />
               </div>
               <span 
-                className="text-[11px] text-white font-medium px-1.5 py-0.5 rounded-md max-w-[70px] truncate"
+                className="text-[10px] text-white font-medium px-1 py-0.5 rounded max-w-[56px] truncate text-center"
                 style={{ 
                   textShadow: "0 1px 3px rgba(0, 0, 0, 0.8), 0 0 8px rgba(0, 0, 0, 0.5)"
                 }}
               >
                 {name}
               </span>
-            </button>
-          );
-        })}
-      </div>
+            </div>
+          </div>
+        );
+      })}
 
       {/* Windows */}
-      {windows.map(window => (
-        !window.isMinimized && (
+      {windows.map(win => (
+        !win.isMinimized && (
           <div
-            key={window.id}
-            onClick={() => setActiveWindow(window.id)}
-            className={`absolute rounded-lg overflow-hidden border transition-all ${
-              activeWindow === window.id ? "border-primary/50 shadow-2xl shadow-primary/20 z-50" : "border-border/50 shadow-xl z-40"
-            }`}
+            key={win.id}
+            onClick={() => setActiveWindow(win.id)}
+            className={`absolute rounded-lg overflow-hidden border transition-shadow ${
+              activeWindow === win.id ? "border-primary/50 shadow-2xl shadow-primary/20 z-50" : "border-border/50 shadow-xl z-40"
+            } ${draggingWindow === win.id ? 'cursor-grabbing' : ''}`}
             style={{
-              left: window.isMaximized ? 0 : window.position.x,
-              top: window.isMaximized ? 0 : window.position.y,
-              width: window.isMaximized ? "100%" : window.size.width,
-              height: window.isMaximized ? "calc(100% - 48px)" : window.size.height,
+              left: win.isMaximized ? 0 : win.position.x,
+              top: win.isMaximized ? 0 : win.position.y,
+              width: win.isMaximized ? "100%" : win.size.width,
+              height: win.isMaximized ? "calc(100% - 48px)" : win.size.height,
             }}
           >
-            <div className="h-10 bg-card/95 backdrop-blur-xl border-b border-border flex items-center justify-between px-3">
-              <div className="flex items-center gap-2">
-                <span className="text-primary">{window.icon}</span>
-                <span className="text-sm font-medium text-foreground">{window.title}</span>
+            <div 
+              className={`h-10 bg-card/95 backdrop-blur-xl border-b border-border flex items-center justify-between px-3 ${
+                !win.isMaximized ? 'cursor-grab active:cursor-grabbing' : ''
+              }`}
+              onMouseDown={(e) => !win.isMaximized && handleWindowMouseDown(e, win.id, win.position)}
+            >
+              <div className="flex items-center gap-2 pointer-events-none">
+                <span className="text-primary">{win.icon}</span>
+                <span className="text-sm font-medium text-foreground">{win.title}</span>
               </div>
               <div className="flex items-center gap-1">
-                <button onClick={(e) => { e.stopPropagation(); minimizeWindow(window.id); }} className="w-6 h-6 rounded flex items-center justify-center hover:bg-muted transition-colors">
+                <button onClick={(e) => { e.stopPropagation(); minimizeWindow(win.id); }} className="w-6 h-6 rounded flex items-center justify-center hover:bg-muted transition-colors pointer-events-auto">
                   <Minus className="w-3 h-3 text-muted-foreground" />
                 </button>
-                <button onClick={(e) => { e.stopPropagation(); maximizeWindow(window.id); }} className="w-6 h-6 rounded flex items-center justify-center hover:bg-muted transition-colors">
+                <button onClick={(e) => { e.stopPropagation(); maximizeWindow(win.id); }} className="w-6 h-6 rounded flex items-center justify-center hover:bg-muted transition-colors pointer-events-auto">
                   <Square className="w-3 h-3 text-muted-foreground" />
                 </button>
-                <button onClick={(e) => { e.stopPropagation(); closeWindow(window.id); }} className="w-6 h-6 rounded flex items-center justify-center hover:bg-destructive/20 transition-colors">
+                <button onClick={(e) => { e.stopPropagation(); closeWindow(win.id); }} className="w-6 h-6 rounded flex items-center justify-center hover:bg-destructive/20 transition-colors pointer-events-auto">
                   <X className="w-3 h-3 text-destructive" />
                 </button>
               </div>
             </div>
-            <div className="h-[calc(100%-40px)] overflow-auto">{window.content}</div>
+            <div className="h-[calc(100%-40px)] overflow-auto">{win.content}</div>
           </div>
         )
       ))}
