@@ -10,9 +10,9 @@ const footerLinks = {
 };
 
 const socialLinks = [
-  { icon: GithubIcon, href: "#" },
-  { icon: TwitterIcon, href: "#" },
-  { icon: LinkedinIcon, href: "#" },
+  { icon: Github, href: "#" },
+  { icon: Twitter, href: "#" },
+  { icon: Linkedin, href: "#" },
 ];
 
 export const Footer = () => {
