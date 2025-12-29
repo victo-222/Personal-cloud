@@ -1,5 +1,11 @@
 import nodemailer from 'nodemailer';
 
+// Simple in-memory rate limiter (per IP). Note: in serverless or multi-instance
+// deployments this should be backed by a shared store (Redis) for reliability.
+const RATE_LIMIT_WINDOW_MS = 60 * 60 * 1000; // 1 hour
+const RATE_LIMIT_MAX = 5; // max sends per IP per window
+const rateMap: Map<string, { count: number; firstTs: number }> = new Map();
+
 // POST /api/send-email
 // Expects JSON { name, email, message }
 export default async function handler(req: any, res: any) {
@@ -36,8 +42,24 @@ export default async function handler(req: any, res: any) {
     return;
   }
 
-  // Sender requested by user
-  const fromAddress = process.env.SENDER_EMAIL || 'review@gmail.com';
+  // Sender requested by user (use a verified sender in production)
+  const fromAddress = process.env.SENDER_EMAIL || 'no-reply@cloudspace.example';
+
+  // Rate limiting by IP
+  const xf = req.headers?.['x-forwarded-for'];
+  const ip = typeof xf === 'string' ? xf.split(',')[0].trim() : req.connection?.remoteAddress || req.socket?.remoteAddress || 'unknown';
+  const entry = rateMap.get(ip) || { count: 0, firstTs: Date.now() };
+  const now = Date.now();
+  if (now - entry.firstTs > RATE_LIMIT_WINDOW_MS) {
+    entry.count = 0;
+    entry.firstTs = now;
+  }
+  entry.count += 1;
+  rateMap.set(ip, entry);
+  if (entry.count > RATE_LIMIT_MAX) {
+    res.status(429).json({ error: 'Rate limit exceeded. Please try again later.' });
+    return;
+  }
 
   // SMTP configuration from env, if provided
   const smtpHost = process.env.SMTP_HOST;
