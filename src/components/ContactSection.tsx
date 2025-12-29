@@ -19,6 +19,24 @@ export const ContactSection = () => {
     const email = String(formData.get('email') || '');
     const message = String(formData.get('message') || '');
 
+    // Client-side validation
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!name.trim()) {
+      setIsSubmitting(false);
+      toast({ title: 'Validation', description: 'Please enter your name.' });
+      return;
+    }
+    if (!emailRegex.test(email)) {
+      setIsSubmitting(false);
+      toast({ title: 'Validation', description: 'Please enter a valid email address.' });
+      return;
+    }
+    if (!message.trim() || message.trim().length < 10) {
+      setIsSubmitting(false);
+      toast({ title: 'Validation', description: 'Please enter a longer message (min 10 characters).' });
+      return;
+    }
+
     fetch('/api/send-email', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -28,8 +46,18 @@ export const ContactSection = () => {
         const data = await res.json().catch(() => ({}));
         if (!res.ok) throw data;
         setIsSubmitting(false);
-        const preview = data?.preview ? ` (preview: ${data.preview})` : '';
-        toast({ title: 'Message sent!', description: `We'll get back to you as soon as possible!${preview}` });
+        const preview = data?.preview ? data.preview : null;
+        if (preview) {
+          // Show a small preview card in the UI
+          toast({ title: 'Message sent (test)', description: 'Email sent via Ethereal — see preview below.' });
+          // Insert a preview link card below the form
+          const container = document.getElementById('contact-preview');
+          if (container) {
+            container.innerHTML = `\n              <div class="mt-4 p-3 rounded bg-card/80 border border-primary/30">\n                <div class="text-sm text-foreground font-medium">Ethereal preview</div>\n                <a class="text-primary text-sm underline" href="${preview}" target="_blank" rel="noreferrer">Open preview</a>\n              </div>`;
+          }
+        } else {
+          toast({ title: 'Message sent!', description: `We'll get back to you as soon as possible!` });
+        }
         form.reset();
       })
       .catch((err) => {
@@ -65,6 +93,7 @@ export const ContactSection = () => {
               <div className="space-y-2">
                 <label className="text-sm font-medium text-foreground">Name</label>
                 <Input 
+                  name="name"
                   placeholder="Your name" 
                   className="bg-background/50 border-primary/30 focus:border-primary"
                 />
@@ -72,6 +101,7 @@ export const ContactSection = () => {
               <div className="space-y-2">
                 <label className="text-sm font-medium text-foreground">Email</label>
                 <Input 
+                  name="email"
                   type="email" 
                   placeholder="your@email.com" 
                   className="bg-background/50 border-primary/30 focus:border-primary"
@@ -80,6 +110,7 @@ export const ContactSection = () => {
               <div className="space-y-2">
                 <label className="text-sm font-medium text-foreground">Message</label>
                 <Textarea 
+                  name="message"
                   placeholder="Your message..." 
                   rows={7}
                   className="bg-background/50 border-primary/30 focus:border-primary resize-none"
@@ -101,6 +132,7 @@ export const ContactSection = () => {
                 )}
               </Button>
             </form>
+            <div id="contact-preview" />
           </Card>
 
           {/* Contact Info */}
