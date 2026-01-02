@@ -24,6 +24,13 @@ export const SettingsPanel = ({
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const backgroundInputRef = useRef<HTMLInputElement>(null);
+
+  // Custom background URL
+  const [customBackgroundUrl, setCustomBackgroundUrl] = useState<string | null>(() => {
+    const stored = localStorage.getItem('pc:custom-background');
+    return stored || null;
+  });
 
   // Neon brightness (persisted to localStorage)
   const [neonBrightness, setNeonBrightness] = useState<number>(() => {
@@ -150,6 +157,75 @@ export const SettingsPanel = ({
     }
   };
 
+  const uploadBackground = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith("image/")) {
+      toast.error("Please select an image file");
+      return;
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error("Image must be less than 5MB");
+      return;
+    }
+
+    setUploading(true);
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      setUploading(false);
+      return;
+    }
+
+    const fileExt = file.name.split(".").pop();
+    const filePath = `${user.id}/background.${fileExt}`;
+
+    const { error: uploadError } = await supabase.storage
+      .from("user-photos")
+      .upload(filePath, file, { upsert: true });
+
+    if (uploadError) {
+      setUploading(false);
+      toast.error("Failed to upload background");
+      return;
+    }
+
+    const { data: publicData } = supabase.storage
+      .from("user-photos")
+      .getPublicUrl(filePath);
+
+    const backgroundUrlWithTimestamp = `${publicData.publicUrl}?t=${Date.now()}`;
+
+    setCustomBackgroundUrl(backgroundUrlWithTimestamp);
+    try {
+      localStorage.setItem('pc:custom-background', backgroundUrlWithTimestamp);
+      // Dispatch custom event to update Desktop component immediately
+      window.dispatchEvent(new CustomEvent('customBackgroundChange', { 
+        detail: { key: 'pc:custom-background', value: backgroundUrlWithTimestamp } 
+      }));
+    } catch (e) {
+      console.warn('Failed to persist custom background', e);
+    }
+
+    setUploading(false);
+    toast.success("Background updated!");
+  };
+
+  const removeCustomBackground = () => {
+    setCustomBackgroundUrl(null);
+    try {
+      localStorage.removeItem('pc:custom-background');
+      // Dispatch custom event to update Desktop component immediately
+      window.dispatchEvent(new CustomEvent('customBackgroundChange', { 
+        detail: { key: 'pc:custom-background', value: null } 
+      }));
+    } catch (e) {
+      console.warn('Failed to remove custom background', e);
+    }
+    toast.success("Custom background removed!");
+  };
+
   return (
     <div className="h-full bg-background p-6 overflow-auto">
       <h2 className="text-xl font-semibold text-foreground mb-6">Settings</h2>
@@ -266,6 +342,65 @@ export const SettingsPanel = ({
                 </button>
               );
             })}
+          </div>
+        </div>
+
+        {/* Custom Background Section */}
+        <div className="border-t border-border pt-6">
+          <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wider mb-4">
+            Custom Background
+          </h3>
+          <p className="text-xs text-muted-foreground mb-4">Upload your own desktop background image</p>
+          
+          <div className="bg-card rounded-lg p-4 space-y-4">
+            {/* Current Background Preview */}
+            {customBackgroundUrl && (
+              <div className="space-y-2">
+                <p className="text-sm font-medium text-foreground">Current Background</p>
+                <div className="relative aspect-video rounded-lg overflow-hidden border border-border">
+                  <img 
+                    src={customBackgroundUrl} 
+                    alt="Custom background" 
+                    className="w-full h-full object-cover"
+                  />
+                  <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity">
+                    <button
+                      onClick={removeCustomBackground}
+                      className="px-3 py-1 bg-destructive text-destructive-foreground rounded text-sm font-medium hover:bg-destructive/90"
+                    >
+                      Remove
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Upload Button */}
+            <div className="flex items-center gap-4">
+              <div 
+                className="relative w-16 h-16 rounded-lg bg-muted flex items-center justify-center overflow-hidden cursor-pointer group border-2 border-dashed border-border hover:border-primary/50 transition-colors"
+                onClick={() => backgroundInputRef.current?.click()}
+              >
+                {uploading ? (
+                  <Loader2 className="w-8 h-8 text-primary animate-spin" />
+                ) : (
+                  <Upload className="w-8 h-8 text-muted-foreground group-hover:text-primary transition-colors" />
+                )}
+              </div>
+              <div className="flex-1">
+                <p className="text-sm font-medium text-foreground">
+                  {customBackgroundUrl ? "Change Background" : "Upload Background"}
+                </p>
+                <p className="text-xs text-muted-foreground">Click to upload (max 5MB, recommended 1920x1080)</p>
+              </div>
+              <input
+                ref={backgroundInputRef}
+                type="file"
+                accept="image/*"
+                onChange={uploadBackground}
+                className="hidden"
+              />
+            </div>
           </div>
         </div>
 

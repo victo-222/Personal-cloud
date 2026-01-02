@@ -141,6 +141,10 @@ const Desktop = () => {
   const [user, setUser] = useState<SupabaseUser | null>(null);
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [wallpaper, setWallpaper] = useState(wallpaperThemes[0]);
+  const [customBackgroundUrl, setCustomBackgroundUrl] = useState<string | null>(() => {
+    const stored = localStorage.getItem('pc:custom-background');
+    return stored || null;
+  });
   const [profileModalOpen, setProfileModalOpen] = useState(false);
   const [globalCloudAiOpen, setGlobalCloudAiOpen] = useState(false);
   const [globalAnonAiOpen, setGlobalAnonAiOpen] = useState(false);
@@ -164,6 +168,29 @@ const Desktop = () => {
   const [draggingIcon, setDraggingIcon] = useState<string | null>(null);
   const [iconDragOffset, setIconDragOffset] = useState({ x: 0, y: 0 });
   const navigate = useNavigate();
+
+  // Listen for custom background changes
+  useEffect(() => {
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === 'pc:custom-background') {
+        setCustomBackgroundUrl(e.newValue);
+      }
+    };
+
+    const handleCustomEvent = (e: CustomEvent) => {
+      if (e.detail?.key === 'pc:custom-background') {
+        setCustomBackgroundUrl(e.detail.value);
+      }
+    };
+
+    window.addEventListener('storage', handleStorageChange);
+    window.addEventListener('customBackgroundChange' as any, handleCustomEvent);
+
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+      window.removeEventListener('customBackgroundChange' as any, handleCustomEvent);
+    };
+  }, []);
 
   // Set random wallpaper based on user ID for consistency
   useEffect(() => {
@@ -417,59 +444,70 @@ const Desktop = () => {
       onMouseUp={handleMouseUp}
       onMouseLeave={handleMouseUp}
     >
-      {/* Live Animated Wallpaper */}
-      <div 
-        className="absolute inset-0 transition-all duration-1000"
-        style={{
-          background: `
-            radial-gradient(ellipse at 20% 20%, ${wallpaper.colors[0]} 0%, transparent 50%),
-            radial-gradient(ellipse at 80% 20%, ${wallpaper.colors[1]} 0%, transparent 50%),
-            radial-gradient(ellipse at 40% 80%, ${wallpaper.colors[2]} 0%, transparent 50%),
-            radial-gradient(ellipse at 90% 70%, ${wallpaper.colors[3]} 0%, transparent 40%),
-            linear-gradient(180deg, hsl(250, 50%, 8%) 0%, hsl(260, 40%, 3%) 100%)
-          `,
-        }}
-      />
+      {/* Live Animated Wallpaper or Custom Background */}
+      {customBackgroundUrl ? (
+        <div 
+          className="absolute inset-0 transition-all duration-1000 bg-cover bg-center bg-no-repeat"
+          style={{
+            backgroundImage: `url(${customBackgroundUrl})`,
+          }}
+        />
+      ) : (
+        <div 
+          className="absolute inset-0 transition-all duration-1000"
+          style={{
+            background: `
+              radial-gradient(ellipse at 20% 20%, ${wallpaper.colors[0]} 0%, transparent 50%),
+              radial-gradient(ellipse at 80% 20%, ${wallpaper.colors[1]} 0%, transparent 50%),
+              radial-gradient(ellipse at 40% 80%, ${wallpaper.colors[2]} 0%, transparent 50%),
+              radial-gradient(ellipse at 90% 70%, ${wallpaper.colors[3]} 0%, transparent 40%),
+              linear-gradient(180deg, hsl(250, 50%, 8%) 0%, hsl(260, 40%, 3%) 100%)
+            `,
+          }}
+        />
+      )}
       
-      {/* Animated Flowing Orbs */}
-      <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div 
-          className="absolute w-[600px] h-[600px] rounded-full blur-[120px] opacity-40"
-          style={{ 
-            background: `radial-gradient(circle, ${wallpaper.colors[0]}, transparent 70%)`,
-            top: "5%", 
-            left: "-5%",
-            animation: "float 15s ease-in-out infinite"
-          }}
-        />
-        <div 
-          className="absolute w-[500px] h-[500px] rounded-full blur-[100px] opacity-35"
-          style={{ 
-            background: `radial-gradient(circle, ${wallpaper.colors[1]}, transparent 70%)`,
-            top: "50%", 
-            right: "-5%",
-            animation: "float-reverse 18s ease-in-out infinite"
-          }}
-        />
-        <div 
-          className="absolute w-[400px] h-[400px] rounded-full blur-[80px] opacity-30"
-          style={{ 
-            background: `radial-gradient(circle, ${wallpaper.colors[2]}, transparent 70%)`,
-            bottom: "10%", 
-            left: "30%",
-            animation: "float 20s ease-in-out infinite 2s"
-          }}
-        />
-        <div 
-          className="absolute w-[300px] h-[300px] rounded-full blur-[60px] opacity-25"
-          style={{ 
-            background: `radial-gradient(circle, ${wallpaper.colors[3]}, transparent 70%)`,
-            top: "30%", 
-            left: "60%",
-            animation: "float-reverse 12s ease-in-out infinite 1s"
-          }}
-        />
-      </div>
+      {/* Animated Flowing Orbs - Only show when no custom background */}
+      {!customBackgroundUrl && (
+        <div className="absolute inset-0 overflow-hidden pointer-events-none">
+          <div 
+            className="absolute w-[600px] h-[600px] rounded-full blur-[120px] opacity-40"
+            style={{ 
+              background: `radial-gradient(circle, ${wallpaper.colors[0]}, transparent 70%)`,
+              top: "5%", 
+              left: "-5%",
+              animation: "float 15s ease-in-out infinite"
+            }}
+          />
+          <div 
+            className="absolute w-[500px] h-[500px] rounded-full blur-[100px] opacity-35"
+            style={{ 
+              background: `radial-gradient(circle, ${wallpaper.colors[1]}, transparent 70%)`,
+              top: "50%", 
+              right: "-5%",
+              animation: "float-reverse 18s ease-in-out infinite"
+            }}
+          />
+          <div 
+            className="absolute w-[400px] h-[400px] rounded-full blur-[80px] opacity-30"
+            style={{ 
+              background: `radial-gradient(circle, ${wallpaper.colors[2]}, transparent 70%)`,
+              bottom: "10%", 
+              left: "30%",
+              animation: "float 20s ease-in-out infinite 2s"
+            }}
+          />
+          <div 
+            className="absolute w-[300px] h-[300px] rounded-full blur-[60px] opacity-25"
+            style={{ 
+              background: `radial-gradient(circle, ${wallpaper.colors[3]}, transparent 70%)`,
+              top: "30%", 
+              left: "60%",
+              animation: "float-reverse 12s ease-in-out infinite 1s"
+            }}
+          />
+        </div>
+      )}
 
       {/* Subtle noise texture overlay */}
       <div 
