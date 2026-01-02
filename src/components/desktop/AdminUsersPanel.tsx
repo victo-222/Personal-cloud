@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { Users, Loader2, Mail, Calendar, Trophy, Shield } from "lucide-react";
+import { Users, Loader2, Mail, Calendar, Trophy, Shield, Plus, Minus, X } from "lucide-react";
+import { Button } from "@/components/ui/button";
 
 interface UserProfile {
   user_id: string;
@@ -18,6 +19,8 @@ export const AdminUsersPanel = () => {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [sortBy, setSortBy] = useState<"points" | "username" | "created">("points");
+  const [editingUser, setEditingUser] = useState<UserProfile | null>(null);
+  const [pointsToAdd, setPointsToAdd] = useState<number>(0);
 
   useEffect(() => {
     fetchAllUsers();
@@ -60,6 +63,30 @@ export const AdminUsersPanel = () => {
     setTimeout(() => {
       fetchAllUsers();
     }, 300);
+  };
+
+  const updateUserPoints = async (userId: string, newPoints: number) => {
+    try {
+      const { error } = await supabase
+        .from("profiles")
+        .update({ points: Math.max(0, newPoints) })
+        .eq("user_id", userId);
+
+      if (error) {
+        console.error("Error updating points:", error);
+        return false;
+      }
+
+      setUsers((prevUsers) =>
+        prevUsers.map((u) =>
+          u.user_id === userId ? { ...u, points: Math.max(0, newPoints) } : u
+        )
+      );
+      return true;
+    } catch (e) {
+      console.error("Failed to update points:", e);
+      return false;
+    }
   };
 
   return (
@@ -139,7 +166,8 @@ export const AdminUsersPanel = () => {
           filteredUsers.map((user) => (
             <div
               key={user.user_id}
-              className="p-3 bg-card border border-border rounded-lg hover:bg-card/80 transition-colors group"
+              className="p-3 bg-card border border-border rounded-lg hover:bg-card/80 transition-colors group cursor-pointer"
+              onClick={() => setEditingUser(user)}
             >
               {/* User Header */}
               <div className="flex items-start gap-3 mb-2">
@@ -235,6 +263,118 @@ export const AdminUsersPanel = () => {
             <span className="font-semibold text-green-500">
               {users.reduce((sum, u) => sum + (u.points || 0), 0)}
             </span>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Points Modal */}
+      {editingUser && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-card border border-border rounded-lg shadow-xl w-full max-w-sm p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-bold text-foreground">Manage Points</h3>
+              <button
+                onClick={() => setEditingUser(null)}
+                className="text-muted-foreground hover:text-foreground transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="mb-4 p-3 bg-background rounded border border-border/50">
+              <p className="text-sm font-semibold text-foreground mb-1">
+                User: {editingUser.username || "Unnamed"}
+              </p>
+              <p className="text-xs text-muted-foreground">{editingUser.email || "N/A"}</p>
+            </div>
+
+            <div className="mb-6 p-4 bg-gradient-to-r from-yellow-500/10 to-orange-500/10 rounded border border-yellow-500/20">
+              <p className="text-xs text-muted-foreground mb-1">Current Points</p>
+              <p className="text-3xl font-bold text-yellow-500">{editingUser.points || 0}</p>
+            </div>
+
+            <div className="space-y-3 mb-6">
+              <div className="flex gap-2">
+                <Button
+                  size="sm"
+                  onClick={() => updateUserPoints(editingUser.user_id, (editingUser.points || 0) + 10)}
+                  className="flex-1"
+                >
+                  <Plus className="w-4 h-4 mr-1" /> Add 10
+                </Button>
+                <Button
+                  size="sm"
+                  onClick={() => updateUserPoints(editingUser.user_id, (editingUser.points || 0) + 50)}
+                  className="flex-1"
+                >
+                  <Plus className="w-4 h-4 mr-1" /> Add 50
+                </Button>
+                <Button
+                  size="sm"
+                  onClick={() => updateUserPoints(editingUser.user_id, (editingUser.points || 0) + 100)}
+                  className="flex-1"
+                >
+                  <Plus className="w-4 h-4 mr-1" /> Add 100
+                </Button>
+              </div>
+
+              <div className="flex gap-2">
+                <Button
+                  size="sm"
+                  variant="destructive"
+                  onClick={() => updateUserPoints(editingUser.user_id, Math.max(0, (editingUser.points || 0) - 10))}
+                  className="flex-1"
+                >
+                  <Minus className="w-4 h-4 mr-1" /> -10
+                </Button>
+                <Button
+                  size="sm"
+                  variant="destructive"
+                  onClick={() => updateUserPoints(editingUser.user_id, Math.max(0, (editingUser.points || 0) - 50))}
+                  className="flex-1"
+                >
+                  <Minus className="w-4 h-4 mr-1" /> -50
+                </Button>
+              </div>
+
+              <div className="flex gap-2">
+                <input
+                  type="number"
+                  value={pointsToAdd}
+                  onChange={(e) => setPointsToAdd(parseInt(e.target.value) || 0)}
+                  placeholder="Custom amount"
+                  className="flex-1 px-3 py-2 bg-background border border-border rounded text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
+                />
+                <Button
+                  size="sm"
+                  onClick={() => {
+                    updateUserPoints(editingUser.user_id, (editingUser.points || 0) + pointsToAdd);
+                    setPointsToAdd(0);
+                  }}
+                  className="flex-1"
+                >
+                  Set
+                </Button>
+              </div>
+
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={() => updateUserPoints(editingUser.user_id, 0)}
+                className="w-full"
+              >
+                Reset to 0
+              </Button>
+            </div>
+
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => setEditingUser(null)}
+              className="w-full"
+            >
+              Close
+            </Button>
           </div>
         </div>
       )}
