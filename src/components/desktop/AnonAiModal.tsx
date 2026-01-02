@@ -282,9 +282,9 @@ export const AnonAiModal: React.FC<Props> = ({ isOpen, onClose, sophistication =
     <Dialog open={isOpen} onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="w-[720px] max-w-[95%] neon-flash">
         <DialogHeader>
-          <DialogTitle className="text-lg font-bold bg-gradient-to-r from-red-400 to-orange-400 bg-clip-text text-transparent">🔐 Anon AI — Advanced Cybersecurity & Penetration Testing Intelligence</DialogTitle>
+          <DialogTitle className="text-lg font-bold bg-gradient-to-r from-red-400 to-orange-400 bg-clip-text text-transparent">🔐 Anon Ai — Elite Cybersecurity & Penetration Testing Intelligence</DialogTitle>
           <DialogDescription className="text-sm text-muted-foreground">
-            Enterprise-grade defensive cybersecurity & ethical penetration testing expertise. Threat analysis, secure architecture, forensics, compliance, and authorized security auditing. Strictly lawful and defensive guidance only.
+            Hacker-grade defensive cybersecurity expertise. Think like KaliGPT and Grok. Threat modeling, penetration testing, incident response, forensics, secure architecture. Strictly legal, authorized, and ethical. Your edge in the security game.
           </DialogDescription>
         </DialogHeader>
 
@@ -319,13 +319,14 @@ export const AnonAiModal: React.FC<Props> = ({ isOpen, onClose, sophistication =
               {responses.length === 0 ? (
                 <div className="flex flex-col items-center justify-center h-full text-center text-muted-foreground">
                   <div className="text-4xl mb-3">🔐</div>
-                  <p className="text-xs font-semibold">Anon AI - Cybersecurity & Penetration Testing Intelligence</p>
+                  <p className="text-xs font-semibold">Anon Ai - Elite Cybersecurity Intelligence (KaliGPT Grade)</p>
                   <p className="text-[11px] text-muted-foreground/70 mt-3 leading-relaxed max-w-sm">
-                    <strong>Defensive Security:</strong> 🛡️ Threat Assessment • 🔍 Forensics • 🏗️ Secure Architecture<br/>
-                    <strong>Penetration Testing:</strong> 🎯 Vulnerability Assessment • 🔓 Exploitation Analysis • 📊 Reporting<br/>
-                    <strong>Network Security:</strong> 🌐 Port Scanning • 🔎 Fingerprinting • 🛣️ Network Mapping<br/>
-                    <strong>Compliance & Tools:</strong> 📋 OWASP/NIST • 🔧 Kali Linux Tools • 🔐 Cryptography<br/>
-                    <strong>⚠️ Legal & Ethical:</strong> Authorization Verification • Legal Frameworks • Best Practices
+                    <strong>🎯 Offensive Techniques (Defensive Context):</strong> Social engineering • Network reconnaissance • Vulnerability exploitation • Physical security<br/>
+                    <strong>🛡️ Defensive Mastery:</strong> Threat intelligence • Incident response • Forensics • Secure architecture<br/>
+                    <strong>🔍 Analysis & Forensics:</strong> Breach investigation • Log analysis • Malware analysis • Timeline reconstruction<br/>
+                    <strong>🛠️ Tools & Frameworks:</strong> Kali Linux • Metasploit • Burp Suite • Nessus • SIEM • Wireshark<br/>
+                    <strong>📋 Frameworks & Compliance:</strong> NIST • OWASP • CIS • ISO 27001 • GDPR • SOC 2<br/>
+                    <strong>⚠️ Legal & Ethical:</strong> Authorization required • Responsible disclosure • Bug bounty programs
                   </p>
                 </div>
               ) : (
@@ -351,15 +352,15 @@ export const AnonAiModal: React.FC<Props> = ({ isOpen, onClose, sophistication =
               <div className="flex gap-1.5 flex-wrap">
                 <button
                   type="button"
-                  onClick={() => setQuery("What are the OWASP Top 10 vulnerabilities for 2024?")}
+                  onClick={() => setQuery("What are the current TTPs (tactics, techniques, procedures) used by major APT groups?")}
                   className="px-2 py-1 bg-red-600/30 hover:bg-red-600/50 text-red-300 rounded text-xs border border-red-500/30 transition"
                   title="Quick query"
                 >
-                  🔓 OWASP Top 10
+                  🕵️ APT TTPs
                 </button>
                 <button
                   type="button"
-                  onClick={() => setQuery("How do I perform a network penetration test? What's the methodology?")}
+                  onClick={() => setQuery("Explain the complete penetration testing methodology from reconnaissance to reporting")}
                   className="px-2 py-1 bg-red-600/30 hover:bg-red-600/50 text-red-300 rounded text-xs border border-red-500/30 transition"
                   title="Quick query"
                 >
@@ -367,26 +368,26 @@ export const AnonAiModal: React.FC<Props> = ({ isOpen, onClose, sophistication =
                 </button>
                 <button
                   type="button"
-                  onClick={() => setQuery("Explain SQL injection attacks and how to detect/prevent them")}
+                  onClick={() => setQuery("How do I detect and respond to a ransomware attack? Incident response plan.")}
                   className="px-2 py-1 bg-red-600/30 hover:bg-red-600/50 text-red-300 rounded text-xs border border-red-500/30 transition"
                   title="Quick query"
                 >
-                  💉 SQL Injection
+                  🚨 Ransomware Response
                 </button>
                 <button
                   type="button"
-                  onClick={() => setQuery("What is responsible disclosure and how do I report vulnerabilities?")}
+                  onClick={() => setQuery("Zero-trust architecture best practices and implementation strategies")}
                   className="px-2 py-1 bg-red-600/30 hover:bg-red-600/50 text-red-300 rounded text-xs border border-red-500/30 transition"
                   title="Quick query"
                 >
-                  📢 Disclosure
+                  🏗️ Zero-Trust
                 </button>
               </div>
               <div className="flex gap-2">
                 <input
                   ref={inputRef}
                   className="flex-1 px-3 py-2 bg-background border border-border rounded text-sm neon-border focus:border-red-400/50 focus:outline-none transition"
-                  placeholder="Ask about threats, forensics, architecture, tools, compliance..."
+                  placeholder="Ask about threats, penetration testing, forensics, architecture, tools, exploits (defensive context)..."
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
                   onKeyDown={(e) => {
@@ -483,7 +484,7 @@ export const AnonAiModal: React.FC<Props> = ({ isOpen, onClose, sophistication =
         <DialogFooter>
           <div className="w-full">
             <div className="text-[11px] text-muted-foreground bg-red-950/30 px-2.5 py-1.5 rounded border border-red-400/20">
-              ✅ Legal Penetration Testing • 🎯 Vulnerability Assessment • 🛡️ Defensive Strategies • 📊 Incident Response • 🔍 Forensics • 🔧 Kali Linux Guidance • 📋 OWASP/NIST Standards • ⚠️ Ethical & Authorized Only
+              ✅ Hacker-Grade Expertise • 🎯 Advanced Penetration Testing • 🛡️ Threat Modeling & Response • 🔍 Forensics & Incident Analysis • 🏗️ Zero-Trust Architecture • 🔧 Kali Linux Tools • 🌐 APT & Real-World Attacks • ⚠️ Ethical & Authorized
             </div>
           </div>
         </DialogFooter>
