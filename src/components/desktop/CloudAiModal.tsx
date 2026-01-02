@@ -92,28 +92,29 @@ export const CloudAiModal: React.FC<Props> = ({ isOpen, onClose, sophistication 
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-3 mb-4 p-3 bg-card/50 border border-border rounded-lg">
+        <div className="space-y-3 mb-4 p-3 bg-gradient-to-br from-blue-950/30 to-cyan-950/30 border border-blue-400/20 rounded-lg">
           <div className="grid grid-cols-2 gap-3">
             <div className="flex flex-col gap-1">
               <label className="text-xs font-semibold text-foreground">🤖 Model:</label>
               <select value={model} onChange={(e) => setModel(e.target.value)} className="px-2 py-1.5 bg-background border border-border rounded text-xs neon-item hover:border-primary transition-colors">
-                <option value="gpt-4o">GPT-4o (Latest)</option>
+                <option value="gpt-4o">GPT-4o (Best)</option>
                 <option value="gpt-4">GPT-4 (Advanced)</option>
-                <option value="gpt-3.5">GPT-3.5 (Fast)</option>
+                <option value="gpt-4-turbo">GPT-4 Turbo (Fast)</option>
+                <option value="gpt-3.5">GPT-3.5 (Quick)</option>
               </select>
             </div>
             <div className="flex flex-col gap-1">
-              <label className="text-xs font-semibold text-foreground">⚙️ Response Style:</label>
+              <label className="text-xs font-semibold text-foreground">⚙️ Response Mode:</label>
               <select value={temperature.toString()} onChange={(e) => setTemperature(Number(e.target.value))} className="px-2 py-1.5 bg-background border border-border rounded text-xs neon-item hover:border-primary transition-colors">
-                <option value="0">Focused (0.0)</option>
+                <option value="0">Precise (0.0)</option>
                 <option value="0.3">Analytical (0.3)</option>
                 <option value="0.7">Balanced (0.7)</option>
                 <option value="1">Creative (1.0)</option>
               </select>
             </div>
           </div>
-          <div className="text-[11px] text-muted-foreground bg-background px-2 py-1.5 rounded border border-border/50">
-            ✨ Expertise: Code Generation • Data Analysis • Technical Writing • Math & Logic • Research Synthesis • Creative Problem-Solving
+          <div className="text-[11px] text-blue-200 bg-background/50 px-2 py-1.5 rounded border border-blue-400/30">
+            🎯 Specializes in: Code • Data Science • Technical Writing • Research • Math • Strategy • Design • Creative Problem-Solving
           </div>
         </div>
 
@@ -162,8 +163,8 @@ export const CloudAiModal: React.FC<Props> = ({ isOpen, onClose, sophistication 
 
         <DialogFooter>
           <div className="w-full">
-            <div className="text-[11px] text-muted-foreground bg-blue-950/30 px-2.5 py-1.5 rounded border border-blue-400/20">
-              ✅ Advanced reasoning • 📊 Multi-domain expertise • 💻 Production-grade output • 🛡️ Safety-aware • ⚡ Real-time streaming
+            <div className="text-[11px] text-blue-200 bg-blue-950/40 px-2.5 py-1.5 rounded border border-blue-400/30">
+              ✅ Expert Reasoning • 🧠 Multi-Domain Knowledge • 💻 Production Code • 📊 Deep Analysis • 🛡️ Ethical AI • ⚡ Real-Time Streaming
             </div>
           </div>
         </DialogFooter>
