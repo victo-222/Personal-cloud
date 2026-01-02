@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { Send, Check, CheckCheck, Cloud, Sparkles, LogIn, X } from "lucide-react";
+import { Send, Check, CheckCheck, Cloud, Sparkles, LogIn, X, MessageCircle, AtSign } from "lucide-react";
 import { CloudAiModal } from "./CloudAiModal";
 
 interface Message {
@@ -9,12 +9,21 @@ interface Message {
   message: string;
   created_at: string;
   user_id: string;
+  mentioned_users?: string[];
 }
 
 interface Notification {
   id: string;
   username: string;
   timestamp: number;
+  type: 'join' | 'mention';
+  mentionedBy?: string;
+  messageId?: string;
+}
+
+interface User {
+  id: string;
+  username: string;
 }
 
 export const CloudChat = () => {
@@ -23,9 +32,14 @@ export const CloudChat = () => {
   const [currentUser, setCurrentUser] = useState<{ id: string; email: string } | null>(null);
   const [cloudAiOpen, setCloudAiOpen] = useState(false);
   const [notifications, setNotifications] = useState<Notification[]>([]);
-  const [activeUsers, setActiveUsers] = useState<Set<string>>(new Set());
+  const [activeUsers, setActiveUsers] = useState<User[]>([]);
+  const [showMentionList, setShowMentionList] = useState(false);
+  const [mentionSearch, setMentionSearch] = useState("");
+  const [cursorPosition, setCursorPosition] = useState(0);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
   const notificationTimersRef = useRef<Record<string, NodeJS.Timeout>>({});
+  const mentionListRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     fetchUser();
@@ -40,43 +54,80 @@ export const CloudChat = () => {
           const message = payload.new as Message;
           setMessages((prev) => [...prev, message]);
           
-          // Check if this is a new user joining
+          // Extract mentioned usernames from message
+          const mentionedUsernames = message.message.match(/@(\w+)/g)?.map(m => m.slice(1)) || [];
+          
+          // Update active users list
           setActiveUsers((prev) => {
-            const isNewUser = !prev.has(message.user_id);
-            if (isNewUser && message.user_id !== currentUser?.id) {
-              // Add notification for new user
-              const notificationId = `${message.user_id}_${Date.now()}`;
-              setNotifications((notifications) => [
-                ...notifications,
-                {
+            const userExists = prev.find(u => u.id === message.user_id);
+            if (!userExists) {
+              return [...prev, { id: message.user_id, username: message.username }];
+            }
+            return prev;
+          });
+          
+          // Check if this is a new user joining (not mentioned users)
+          const isNewUser = !messages.some(m => m.user_id === message.user_id) && 
+                           message.user_id !== currentUser?.id &&
+                           mentionedUsernames.length === 0;
+          
+          if (isNewUser) {
+            // Add notification for new user joining
+            const notificationId = `join_${message.user_id}_${Date.now()}`;
+            const notification: Notification = {
+              id: notificationId,
+              username: message.username,
+              timestamp: Date.now(),
+              type: 'join',
+            };
+            setNotifications((notifications) => [...notifications, notification]);
+
+            const timer = setTimeout(() => {
+              setNotifications((notifications) =>
+                notifications.filter((n) => n.id !== notificationId)
+              );
+              delete notificationTimersRef.current[notificationId];
+            }, 7000);
+
+            notificationTimersRef.current[notificationId] = timer;
+          }
+          
+          // Handle mention notifications
+          if (mentionedUsernames.length > 0) {
+            mentionedUsernames.forEach((mentionedUsername) => {
+              const mentionedUser = activeUsers.find(u => u.username === mentionedUsername);
+              if (mentionedUser && mentionedUser.id !== currentUser?.id) {
+                const notificationId = `mention_${mentionedUser.id}_${message.id}`;
+                const notification: Notification = {
                   id: notificationId,
                   username: message.username,
                   timestamp: Date.now(),
-                },
-              ]);
+                  type: 'mention',
+                  mentionedBy: message.username,
+                  messageId: message.id,
+                };
+                setNotifications((notifications) => [...notifications, notification]);
 
-              // Auto-remove notification after 7 seconds
-              const timer = setTimeout(() => {
-                setNotifications((notifications) =>
-                  notifications.filter((n) => n.id !== notificationId)
-                );
-                delete notificationTimersRef.current[notificationId];
-              }, 7000);
+                const timer = setTimeout(() => {
+                  setNotifications((notifications) =>
+                    notifications.filter((n) => n.id !== notificationId)
+                  );
+                  delete notificationTimersRef.current[notificationId];
+                }, 7000);
 
-              notificationTimersRef.current[notificationId] = timer;
-            }
-            return new Set([...prev, message.user_id]);
-          });
+                notificationTimersRef.current[notificationId] = timer;
+              }
+            });
+          }
         }
       )
       .subscribe();
 
     return () => {
       supabase.removeChannel(channel);
-      // Clear all notification timers on unmount
       Object.values(notificationTimersRef.current).forEach(clearTimeout);
     };
-  }, [currentUser?.id]);
+  }, [currentUser?.id, messages, activeUsers]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -113,7 +164,50 @@ export const CloudChat = () => {
 
     if (!error) {
       setNewMessage("");
+      setShowMentionList(false);
     }
+  };
+
+  const handleInputChange = (value: string) => {
+    setNewMessage(value);
+    setCursorPosition(value.length);
+    
+    // Check if user is typing a mention
+    const lastAtSymbol = value.lastIndexOf("@");
+    if (lastAtSymbol !== -1 && lastAtSymbol === value.length - 1) {
+      setMentionSearch("");
+      setShowMentionList(true);
+    } else if (lastAtSymbol !== -1) {
+      const textAfterAt = value.substring(lastAtSymbol + 1);
+      if (!textAfterAt.includes(" ")) {
+        setMentionSearch(textAfterAt);
+        setShowMentionList(true);
+      } else {
+        setShowMentionList(false);
+      }
+    } else {
+      setShowMentionList(false);
+    }
+  };
+
+  const selectMention = (username: string) => {
+    const lastAtSymbol = newMessage.lastIndexOf("@");
+    if (lastAtSymbol !== -1) {
+      const beforeMention = newMessage.substring(0, lastAtSymbol);
+      const textAfterMention = newMessage.substring(newMessage.length);
+      const newMessageText = `${beforeMention}@${username} `;
+      setNewMessage(newMessageText);
+      setShowMentionList(false);
+      inputRef.current?.focus();
+    }
+  };
+
+  const getFilteredUsers = () => {
+    return activeUsers.filter((user) => {
+      if (user.id === currentUser?.id) return false;
+      if (!mentionSearch) return true;
+      return user.username.toLowerCase().includes(mentionSearch.toLowerCase());
+    });
   };
 
   const formatTime = (dateString: string) => {
@@ -214,7 +308,8 @@ export const CloudChat = () => {
                   return (
                     <div
                       key={msg.id}
-                      className={`flex ${isOwn ? "justify-end" : "justify-start"} mb-1`}
+                      id={`msg_${msg.id}`}
+                      className={`flex ${isOwn ? "justify-end" : "justify-start"} mb-1 transition-all duration-300`}
                     >
                       <div
                         className={`relative max-w-[75%] rounded-lg px-3 py-2 shadow-sm ${
@@ -258,7 +353,7 @@ export const CloudChat = () => {
       </div>
 
       {/* Input - WhatsApp style */}
-      <form onSubmit={sendMessage} className="p-3 bg-card border-t border-border flex items-center gap-2">
+      <form onSubmit={sendMessage} className="p-3 bg-card border-t border-border flex items-center gap-2 relative">
         <button
           type="button"
           onClick={(e) => {
@@ -273,11 +368,45 @@ export const CloudChat = () => {
         </button>
         <div className="flex-1 relative">
           <input
+            ref={inputRef}
             value={newMessage}
-            onChange={(e) => setNewMessage(e.target.value)}
-            placeholder="Type a message..."
+            onChange={(e) => handleInputChange(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Escape") {
+                setShowMentionList(false);
+              }
+            }}
+            placeholder="Type @ to mention someone..."
             className="w-full px-4 py-2.5 bg-background border border-border rounded-full text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 placeholder:text-muted-foreground"
           />
+          
+          {/* Mention Autocomplete List */}
+          {showMentionList && (
+            <div
+              ref={mentionListRef}
+              className="absolute bottom-full left-0 right-0 mb-2 bg-card border border-primary/30 rounded-lg shadow-lg overflow-hidden z-50"
+            >
+              <div className="max-h-48 overflow-y-auto">
+                {getFilteredUsers().length > 0 ? (
+                  getFilteredUsers().map((user) => (
+                    <button
+                      key={user.id}
+                      type="button"
+                      onClick={() => selectMention(user.username)}
+                      className="w-full px-4 py-2 text-left hover:bg-primary/10 transition-colors border-b border-border/50 last:border-b-0 flex items-center gap-2"
+                    >
+                      <AtSign className="w-4 h-4 text-primary" />
+                      <span className="text-sm font-medium text-foreground">~{user.username}</span>
+                    </button>
+                  ))
+                ) : (
+                  <div className="px-4 py-3 text-center text-xs text-muted-foreground">
+                    No users found
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
         </div>
         <button 
           type="submit" 
@@ -291,32 +420,78 @@ export const CloudChat = () => {
       {/* Cloud AI Modal */}
       <CloudAiModal isOpen={cloudAiOpen} onClose={() => setCloudAiOpen(false)} sophistication="very-high" />
 
-      {/* User Join Notifications */}
+      {/* User Join & Mention Notifications */}
       <div className="fixed bottom-20 right-4 z-50 space-y-2 pointer-events-none">
         {notifications.map((notification) => (
           <div
             key={notification.id}
             className="animate-in slide-in-from-right-5 fade-in pointer-events-auto"
           >
-            <div className="bg-card/95 border border-primary/30 backdrop-blur-sm rounded-lg p-3 shadow-lg flex items-center gap-2 min-w-max">
-              <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
-              <div className="flex items-center gap-2">
-                <LogIn className="w-4 h-4 text-green-400" />
-                <span className="text-sm font-medium text-foreground">
-                  <span className="text-green-400">~{notification.username}</span> joined
-                </span>
+            {notification.type === 'join' ? (
+              // Join notification
+              <div className="bg-card/95 border border-primary/30 backdrop-blur-sm rounded-lg p-3 shadow-lg flex items-center gap-2 min-w-max">
+                <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+                <div className="flex items-center gap-2">
+                  <LogIn className="w-4 h-4 text-green-400" />
+                  <span className="text-sm font-medium text-foreground">
+                    <span className="text-green-400">~{notification.username}</span> joined
+                  </span>
+                </div>
+                <button
+                  onClick={() =>
+                    setNotifications((notifications) =>
+                      notifications.filter((n) => n.id !== notification.id)
+                    )
+                  }
+                  className="ml-2 p-1 hover:bg-primary/10 rounded transition-colors"
+                >
+                  <X className="w-3 h-3 text-muted-foreground hover:text-foreground" />
+                </button>
               </div>
-              <button
-                onClick={() =>
-                  setNotifications((notifications) =>
-                    notifications.filter((n) => n.id !== notification.id)
-                  )
-                }
-                className="ml-2 p-1 hover:bg-primary/10 rounded transition-colors"
-              >
-                <X className="w-3 h-3 text-muted-foreground hover:text-foreground" />
-              </button>
-            </div>
+            ) : (
+              // Mention notification
+              <div className="bg-card/95 border border-blue-400/30 backdrop-blur-sm rounded-lg p-3 shadow-lg flex items-center justify-between gap-3 min-w-max hover:border-blue-400/50 transition-colors">
+                <div className="flex items-center gap-2">
+                  <div className="w-2 h-2 rounded-full bg-blue-500 animate-pulse" />
+                  <AtSign className="w-4 h-4 text-blue-400" />
+                  <span className="text-sm font-medium text-foreground">
+                    <span className="text-blue-400">~{notification.mentionedBy}</span> mentioned you
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => {
+                      // Scroll to message
+                      const messageElement = document.getElementById(`msg_${notification.messageId}`);
+                      if (messageElement) {
+                        messageElement.scrollIntoView({ behavior: "smooth", block: "center" });
+                        messageElement.classList.add("ring-2", "ring-blue-400");
+                        setTimeout(() => {
+                          messageElement.classList.remove("ring-2", "ring-blue-400");
+                        }, 3000);
+                      }
+                      setNotifications((notifications) =>
+                        notifications.filter((n) => n.id !== notification.id)
+                      );
+                    }}
+                    className="px-2 py-1 text-xs bg-blue-500/20 hover:bg-blue-500/30 text-blue-400 rounded transition-colors border border-blue-400/50"
+                  >
+                    <MessageCircle className="w-3 h-3 inline mr-1" />
+                    See
+                  </button>
+                  <button
+                    onClick={() =>
+                      setNotifications((notifications) =>
+                        notifications.filter((n) => n.id !== notification.id)
+                      )
+                    }
+                    className="p-1 hover:bg-primary/10 rounded transition-colors"
+                  >
+                    <X className="w-3 h-3 text-muted-foreground hover:text-foreground" />
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         ))}
       </div>
