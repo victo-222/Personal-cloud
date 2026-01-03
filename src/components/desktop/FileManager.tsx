@@ -1,12 +1,20 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
 import { 
   Folder, FileText, Plus, Trash2, Edit2, Download, Upload, Copy, Move, Search as SearchIcon, Image as ImageIcon, Code, Music, GripVertical,
   ChevronLeft, ChevronRight, Home, Heart, Clock, HardDrive, Zap, Settings, Eye, EyeOff, Archive, Share2, MoreVertical, List, LayoutGrid,
-  Grid3x3, FileImage, Calendar, HardDriveIcon, FileUp, Link as LinkIcon, X, LogOut
+  Grid3x3, FileImage, Calendar, HardDriveIcon, FileUp, Link as LinkIcon, X, LogOut, Lock, Cloud, History, AlertCircle, CheckCircle, MessageSquare
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { AIFileOrganizer } from "@/lib/ai-file-organizer";
+import { FileEncryptionService } from "@/lib/file-encryption";
+import { VersionControlService } from "@/lib/version-control";
+import { cloudSyncService, type CloudProvider } from "@/lib/cloud-sync";
 
 interface UserFile {
   id: string;
@@ -16,6 +24,11 @@ interface UserFile {
   parent_folder: string;
   created_at?: string;
   size?: number;
+  isEncrypted?: boolean;
+  cloudSynced?: boolean;
+  versionCount?: number;
+  category?: string;
+  tags?: string[];
 }
 
 interface Tab {
@@ -24,14 +37,37 @@ interface Tab {
   label: string;
 }
 
+interface FileComment {
+  id: string;
+  author: string;
+  text: string;
+  timestamp: Date;
+}
+
 type ViewMode = "grid" | "list" | "details" | "tiles" | "thumbnails";
 type SortOption = "name" | "size" | "type" | "date";
 type GroupOption = "none" | "type" | "date";
 
 export const FileManager = () => {
+  // Initialize advanced services
+  const organizer = new AIFileOrganizer();
+  const encryptionService = new FileEncryptionService();
+  const versionControl = new VersionControlService();
+
   // Core state
   const [files, setFiles] = useState<UserFile[]>([]);
   const [selectedFile, setSelectedFile] = useState<UserFile | null>(null);
+  
+  // Advanced features state
+  const [showEncryptDialog, setShowEncryptDialog] = useState(false);
+  const [showVersionDialog, setShowVersionDialog] = useState(false);
+  const [showCloudSyncDialog, setShowCloudSyncDialog] = useState(false);
+  const [showCollaborationDialog, setShowCollaborationDialog] = useState(false);
+  const [encryptionPassword, setEncryptionPassword] = useState("");
+  const [fileComments, setFileComments] = useState<FileComment[]>([]);
+  const [newComment, setNewComment] = useState("");
+  const [selectedCloudProvider, setSelectedCloudProvider] = useState<CloudProvider>("google-drive");
+  const [cloudSyncStatus, setCloudSyncStatus] = useState<any[]>([]);
   
   // UI state
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; id: string } | null>(null);
@@ -42,12 +78,12 @@ export const FileManager = () => {
   const [multiSelect, setMultiSelect] = useState<string[]>([]);
   const [draggedItem, setDraggedItem] = useState<string | null>(null);
   const [dragOverFolder, setDragOverFolder] = useState<string | null>(null);
-  const [showHidden, setShowHidden] = useState(false);
+  const [showHidden, setShowHidden] = useState(false)
+  const [showTrash, setShowTrash] = useState(false);;
   const [showExtensions, setShowExtensions] = useState(true);
   const [favorites, setFavorites] = useState<string[]>([]);
   const [clipboard, setClipboard] = useState<{ items: string[], operation: "copy" | "cut" } | null>(null);
   const [trash, setTrash] = useState<UserFile[]>([]);
-  const [showTrash, setShowTrash] = useState(false);
   
   // Tabs and navigation
   const [tabs, setTabs] = useState<Tab[]>([{ id: "1", path: ["root"], label: "Home" }]);
@@ -416,6 +452,100 @@ export const FileManager = () => {
     if (fileName.endsWith(".zip") || fileName.endsWith(".rar") || fileName.endsWith(".7z")) return <Archive className="w-6 h-6 text-yellow-600" />;
     return <FileText className="w-6 h-6 text-slate-500" />;
   };
+
+  // Advanced features
+  const analyzeAndOrganizeFile = useCallback(async (file: UserFile) => {
+    if (!file.content) return;
+    const fileInfo = {
+      name: file.name,
+      size: file.content.length,
+      uploadedAt: new Date(),
+      type: file.file_type,
+      content: new Uint8Array(Buffer.from(file.content)),
+    };
+    const analysis = organizer.analyzeFile(fileInfo);
+    
+    const updated = { ...file, category: analysis.category, tags: analysis.tags };
+    setFiles(prev => prev.map(f => f.id === file.id ? updated : f));
+    
+    // Initialize version control
+    versionControl.createVersion(file.name, fileInfo, 'system', 'File analyzed');
+  }, [organizer, versionControl]);
+
+  const handleEncryptFile = useCallback(async (file: UserFile, password: string) => {
+    if (!file.content) return;
+    try {
+      const buffer = file.content as unknown as ArrayBuffer;
+      const encrypted = await encryptionService.encryptFile(buffer, password);
+      
+      const updated = { ...file, isEncrypted: true, content: encrypted.encrypted.toString() };
+      setFiles(prev => prev.map(f => f.id === file.id ? updated : f));
+      
+      const fileInfo = {
+        name: file.name,
+        size: file.content.length,
+        uploadedAt: new Date(),
+        type: file.file_type,
+      };
+      
+      versionControl.commitVersion(file.name, fileInfo, 'system', 'File encrypted');
+      setEncryptionPassword("");
+      setShowEncryptDialog(false);
+      toast({ title: "Success", description: "File encrypted successfully" });
+    } catch (error) {
+      toast({ title: "Error", description: "Failed to encrypt file", variant: "destructive" });
+    }
+  }, [encryptionService, versionControl, toast]);
+
+  const handleCloudSync = useCallback(async (file: UserFile, provider: CloudProvider) => {
+    try {
+      const config = {
+        provider,
+        autoSync: false,
+        syncInterval: 3600000,
+        encryptBeforeUpload: file.isEncrypted || false,
+        compressionEnabled: true,
+        maxStorageGB: 100,
+      };
+
+      cloudSyncService.configureProvider(provider, config);
+      await cloudSyncService.connect(provider);
+      
+      const fileInfo = {
+        name: file.name,
+        size: file.content?.length || 0,
+        uploadedAt: new Date(),
+        type: file.file_type,
+        content: new Uint8Array(Buffer.from(file.content || '')),
+      };
+      
+      await cloudSyncService.uploadFile(provider, fileInfo, file.isEncrypted);
+      
+      const updated = { ...file, cloudSynced: true };
+      setFiles(prev => prev.map(f => f.id === file.id ? updated : f));
+      
+      versionControl.commitVersion(file.name, fileInfo, 'system', `Synced to ${provider}`);
+      setCloudSyncStatus(cloudSyncService.getAllSyncStatus());
+      setShowCloudSyncDialog(false);
+      toast({ title: "Success", description: `File synced to ${provider}` });
+    } catch (error) {
+      toast({ title: "Error", description: "Failed to sync file", variant: "destructive" });
+    }
+  }, [encryptionService, versionControl, toast]);
+
+  const addFileComment = useCallback(() => {
+    if (!selectedFile || !newComment.trim()) return;
+    
+    const comment: FileComment = {
+      id: Date.now().toString(),
+      author: 'Current User',
+      text: newComment,
+      timestamp: new Date(),
+    };
+    
+    setFileComments(prev => [...prev, comment]);
+    setNewComment("");
+  }, [selectedFile, newComment]);
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -1001,6 +1131,25 @@ export const FileManager = () => {
                       <Button size="sm" className="w-full" onClick={() => toggleFavorite(selectedFile.name)} variant="secondary">
                         <Heart className={`w-4 h-4 mr-2 ${favorites.includes(selectedFile.name) ? "fill-current" : ""}`} /> {favorites.includes(selectedFile.name) ? "Remove" : "Add"} Favorite
                       </Button>
+                      
+                      {/* Advanced Features */}
+                      <div className="border-t border-border pt-2 mt-2">
+                        <Button size="sm" className="w-full" onClick={() => analyzeAndOrganizeFile(selectedFile)} variant="secondary">
+                          <Zap className="w-4 h-4 mr-2" /> Analyze
+                        </Button>
+                        <Button size="sm" className="w-full" onClick={() => setShowEncryptDialog(true)} variant="secondary">
+                          <Lock className="w-4 h-4 mr-2" /> {selectedFile.isEncrypted ? 'Decrypt' : 'Encrypt'}
+                        </Button>
+                        <Button size="sm" className="w-full" onClick={() => setShowVersionDialog(true)} variant="secondary">
+                          <History className="w-4 h-4 mr-2" /> Versions ({selectedFile.versionCount || 1})
+                        </Button>
+                        <Button size="sm" className="w-full" onClick={() => setShowCloudSyncDialog(true)} variant="secondary">
+                          <Cloud className="w-4 h-4 mr-2" /> {selectedFile.cloudSynced ? 'Synced' : 'Sync to Cloud'}
+                        </Button>
+                        <Button size="sm" className="w-full" onClick={() => setShowCollaborationDialog(true)} variant="secondary">
+                          <MessageSquare className="w-4 h-4 mr-2" /> Collaborate
+                        </Button>
+                      </div>
                     </>
                   )}
                   <Button size="sm" className="w-full" onClick={() => deleteItem(selectedFile.id)} variant="destructive">
@@ -1098,6 +1247,158 @@ export const FileManager = () => {
                   <Trash2 className="w-4 h-4" /> Delete
                 </button>
               </div>
+            )}
+
+            {/* Encryption Dialog */}
+            {selectedFile && (
+              <Dialog open={showEncryptDialog} onOpenChange={setShowEncryptDialog}>
+                <DialogContent className="bg-card border-border">
+                  <DialogHeader>
+                    <DialogTitle>{selectedFile.isEncrypted ? 'Decrypt' : 'Encrypt'} File</DialogTitle>
+                  </DialogHeader>
+                  <div className="space-y-4">
+                    <p className="text-sm text-muted-foreground">File: {selectedFile.name}</p>
+                    <Input
+                      type="password"
+                      placeholder="Enter password"
+                      value={encryptionPassword}
+                      onChange={(e) => setEncryptionPassword(e.target.value)}
+                      className="bg-background border-border"
+                    />
+                    <div className="flex gap-2">
+                      <Button
+                        onClick={() => handleEncryptFile(selectedFile, encryptionPassword)}
+                        className="flex-1"
+                      >
+                        {selectedFile.isEncrypted ? 'Decrypt' : 'Encrypt'}
+                      </Button>
+                      <Button
+                        onClick={() => setShowEncryptDialog(false)}
+                        variant="outline"
+                        className="flex-1"
+                      >
+                        Cancel
+                      </Button>
+                    </div>
+                  </div>
+                </DialogContent>
+              </Dialog>
+            )}
+
+            {/* Version History Dialog */}
+            {selectedFile && (
+              <Dialog open={showVersionDialog} onOpenChange={setShowVersionDialog}>
+                <DialogContent className="bg-card border-border max-w-2xl">
+                  <DialogHeader>
+                    <DialogTitle>Version History - {selectedFile.name}</DialogTitle>
+                  </DialogHeader>
+                  <div className="space-y-3 max-h-96 overflow-y-auto">
+                    <p className="text-sm text-muted-foreground">Total versions: {selectedFile.versionCount || 1}</p>
+                    <div className="text-sm text-muted-foreground">
+                      <p>• Created: {selectedFile.created_at ? new Date(selectedFile.created_at).toLocaleString() : 'Unknown'}</p>
+                      <p>• Size: {selectedFile.content ? `${selectedFile.content.length} bytes` : '0 bytes'}</p>
+                    </div>
+                  </div>
+                </DialogContent>
+              </Dialog>
+            )}
+
+            {/* Cloud Sync Dialog */}
+            {selectedFile && (
+              <Dialog open={showCloudSyncDialog} onOpenChange={setShowCloudSyncDialog}>
+                <DialogContent className="bg-card border-border">
+                  <DialogHeader>
+                    <DialogTitle>Cloud Sync - {selectedFile.name}</DialogTitle>
+                  </DialogHeader>
+                  <div className="space-y-4">
+                    <div className="grid grid-cols-2 gap-2">
+                      {(['google-drive', 'dropbox', 'custom'] as CloudProvider[]).map((provider) => (
+                        <Button
+                          key={provider}
+                          onClick={() => handleCloudSync(selectedFile, provider)}
+                          variant="secondary"
+                          className="capitalize"
+                        >
+                          <Cloud className="w-4 h-4 mr-2" />
+                          {provider}
+                        </Button>
+                      ))}
+                    </div>
+                    {selectedFile.cloudSynced && (
+                      <div className="flex items-center gap-2 p-2 bg-green-500/10 border border-green-500/20 rounded">
+                        <CheckCircle className="w-4 h-4 text-green-500" />
+                        <span className="text-sm text-green-500">File is synced to cloud</span>
+                      </div>
+                    )}
+                  </div>
+                </DialogContent>
+              </Dialog>
+            )}
+
+            {/* Collaboration Dialog */}
+            {selectedFile && (
+              <Dialog open={showCollaborationDialog} onOpenChange={setShowCollaborationDialog}>
+                <DialogContent className="bg-card border-border max-w-2xl">
+                  <DialogHeader>
+                    <DialogTitle>Collaboration - {selectedFile.name}</DialogTitle>
+                  </DialogHeader>
+                  <Tabs defaultValue="comments" className="w-full">
+                    <TabsList className="bg-background">
+                      <TabsTrigger value="comments">Comments</TabsTrigger>
+                      <TabsTrigger value="sharing">Sharing</TabsTrigger>
+                    </TabsList>
+
+                    <TabsContent value="comments" className="space-y-4">
+                      <div className="space-y-3 max-h-48 overflow-y-auto">
+                        {fileComments.map((comment) => (
+                          <div key={comment.id} className="p-3 bg-background rounded border border-border/50">
+                            <div className="flex items-center justify-between mb-2">
+                              <span className="font-semibold text-sm">{comment.author}</span>
+                              <span className="text-xs text-muted-foreground">
+                                {comment.timestamp.toLocaleTimeString()}
+                              </span>
+                            </div>
+                            <p className="text-sm text-foreground">{comment.text}</p>
+                          </div>
+                        ))}
+                      </div>
+
+                      <div className="flex gap-2">
+                        <Input
+                          placeholder="Add a comment..."
+                          value={newComment}
+                          onChange={(e) => setNewComment(e.target.value)}
+                          onKeyPress={(e) => {
+                            if (e.key === 'Enter') addFileComment();
+                          }}
+                          className="bg-background border-border"
+                        />
+                        <Button
+                          onClick={addFileComment}
+                          size="sm"
+                        >
+                          Send
+                        </Button>
+                      </div>
+                    </TabsContent>
+
+                    <TabsContent value="sharing" className="space-y-4">
+                      <div className="space-y-2">
+                        <label className="text-sm font-semibold">Share with:</label>
+                        <Input
+                          placeholder="Enter email addresses (comma-separated)"
+                          className="bg-background border-border"
+                        />
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <input type="checkbox" id="public-share" className="accent-primary" />
+                        <label htmlFor="public-share" className="text-sm cursor-pointer">Make public (anyone with link)</label>
+                      </div>
+                      <Button className="w-full">Share</Button>
+                    </TabsContent>
+                  </Tabs>
+                </DialogContent>
+              </Dialog>
             )}
           </div>
         </div>
