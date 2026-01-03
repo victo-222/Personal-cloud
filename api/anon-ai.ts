@@ -1,9 +1,68 @@
 import type { Request, Response } from 'express';
 
-// Simple Vercel-compatible serverless function that proxies to an LLM.
+// Vercel-compatible serverless function with tgpt-like features
+// Supports multiple AI providers, web search, and advanced security capabilities
 // Environment variables expected:
 // - OPENAI_API_KEY or LLM_API_KEY
 // - OPENAI_MODEL (optional, default provided)
+// - GROQ_API_KEY (for groq provider)
+// - GEMINI_API_KEY (for gemini provider)
+// - GOOGLE_SEARCH_API_KEY (for web search)
+// - GOOGLE_CUSTOM_SEARCH_ENGINE_ID (for web search)
+
+interface ProviderConfig {
+  name: string;
+  endpoint: string;
+  apiKey?: string;
+  defaultModel: string;
+  isOpenAICompatible: boolean;
+}
+
+const getProviderConfig = (provider: string, req: any): ProviderConfig => {
+  const provider_lower = (provider || 'openai').toLowerCase();
+  
+  switch (provider_lower) {
+    case 'groq':
+      return {
+        name: 'groq',
+        endpoint: 'https://api.groq.com/openai/v1/chat/completions',
+        apiKey: process.env.GROQ_API_KEY || process.env.LLM_API_KEY,
+        defaultModel: 'mixtral-8x7b-32768',
+        isOpenAICompatible: true,
+      };
+    case 'gemini':
+      return {
+        name: 'gemini',
+        endpoint: 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions',
+        apiKey: process.env.GEMINI_API_KEY || process.env.LLM_API_KEY,
+        defaultModel: 'gemini-2.0-flash',
+        isOpenAICompatible: true,
+      };
+    case 'deepseek':
+      return {
+        name: 'deepseek',
+        endpoint: 'https://api.deepseek.com/chat/completions',
+        apiKey: process.env.DEEPSEEK_API_KEY || process.env.LLM_API_KEY,
+        defaultModel: 'deepseek-reasoner',
+        isOpenAICompatible: true,
+      };
+    case 'ollama':
+      return {
+        name: 'ollama',
+        endpoint: 'http://localhost:11434/v1/chat/completions',
+        defaultModel: 'mistral',
+        isOpenAICompatible: true,
+      };
+    default:
+      return {
+        name: 'openai',
+        endpoint: process.env.OPENAI_API_URL || 'https://api.openai.com/v1/chat/completions',
+        apiKey: process.env.OPENAI_API_KEY || process.env.LLM_API_KEY,
+        defaultModel: 'gpt-4o-mini',
+        isOpenAICompatible: true,
+      };
+  }
+};
 
 export default async function handler(req: Request, res: Response) {
   // Allow POST for normal requests and GET for simple streaming EventSource clients
@@ -22,72 +81,137 @@ export default async function handler(req: Request, res: Response) {
     return;
   }
 
-  // Basic safety filter: refuse obviously malicious prompts
-  const blacklist = /(exploit|exploitative|attack|ddos|malicious|rootkit|payload|rack|hacking|bypass|unauthorized|phishing|sql injection|xss)/i;
-  if (blacklist.test(prompt)) {
-    res.status(400).json({ error: 'Prompt contains disallowed content. This assistant only provides defensive, lawful guidance.' });
+  // Advanced safety filter: context-aware detection
+  const strictBlacklist = /(malware|ransomware|cryptolocker|trojan|botnet|c2|command.*control)/i;
+  const illegalBlacklist = /(sql injection|cross.?site scripting|xss exploit|ddos.*attack|data theft)/i;
+  
+  if (strictBlacklist.test(prompt)) {
+    res.status(400).json({ error: 'Prompt blocked: Contains references to malware/illegal activities. Only defensive guidance provided.' });
     return;
   }
 
-  const apiKey = process.env.OPENAI_API_KEY || process.env.LLM_API_KEY;
-  const model = req.body?.model || process.env.OPENAI_MODEL || 'gpt-4o-mini';
-  const temperature = typeof req.body?.temperature === 'number' ? req.body.temperature : (process.env.OPENAI_TEMPERATURE ? Number(process.env.OPENAI_TEMPERATURE) : 0.2);
-  const endpoint = process.env.OPENAI_API_URL || 'https://api.openai.com/v1/chat/completions';
-  const wantStream = !!(req.body?.stream || req.query?.stream);
+  if (illegalBlacklist.test(prompt) && !prompt.toLowerCase().includes('detect') && !prompt.toLowerCase().includes('defend')) {
+    res.status(400).json({ error: 'Prompt blocked: Appears to seek offensive techniques without defensive context.' });
+    return;
+  }
 
-  if (!apiKey) {
-    res.status(500).json({ error: 'No LLM API key configured (OPENAI_API_KEY or LLM_API_KEY).' });
+  const provider = (req.body?.provider || req.query?.provider || 'openai') as string;
+  const providerConfig = getProviderConfig(provider, req);
+  const apiKey = req.body?.apiKey || providerConfig.apiKey;
+  const model = req.body?.model || process.env.OPENAI_MODEL || providerConfig.defaultModel;
+  const temperature = typeof req.body?.temperature === 'number' ? req.body.temperature : (process.env.OPENAI_TEMPERATURE ? Number(process.env.OPENAI_TEMPERATURE) : 0.3);
+  const topP = typeof req.body?.top_p === 'number' ? req.body.top_p : 0.9;
+  const maxTokens = typeof req.body?.max_tokens === 'number' ? req.body.max_tokens : 2000;
+  const endpoint = req.body?.endpoint || providerConfig.endpoint;
+  const wantStream = !!(req.body?.stream || req.query?.stream);
+  const enableWebSearch = !!(req.body?.web_search || req.query?.web_search);
+  const verbose = !!(req.body?.verbose || req.query?.verbose);
+
+  if (!apiKey && providerConfig.name !== 'ollama') {
+    res.status(500).json({ error: `No API key configured for provider: ${providerConfig.name}` });
     return;
   }
 
   try {
+    // Web search integration (tgpt-style)
+    let searchResults = '';
+    if (enableWebSearch && process.env.GOOGLE_SEARCH_API_KEY) {
+      try {
+        const searchQuery = extractSearchTerms(prompt);
+        const searchResp = await fetch(
+          `https://www.googleapis.com/customsearch/v1?key=${process.env.GOOGLE_SEARCH_API_KEY}&cx=${process.env.GOOGLE_CUSTOM_SEARCH_ENGINE_ID}&q=${encodeURIComponent(searchQuery)}&num=5`
+        );
+        if (searchResp.ok) {
+          const searchData = await searchResp.json() as any;
+          if (searchData.items) {
+            searchResults = '\n\n**Web Search Results:**\n' + searchData.items
+              .map((item: any, idx: number) => `${idx + 1}. [${item.title}](${item.link})\n${item.snippet}`)
+              .join('\n\n');
+            if (verbose) console.log('Web search executed for:', searchQuery);
+          }
+        }
+      } catch (e) {
+        if (verbose) console.log('Web search failed:', e);
+      }
+    }
+
+    const userPromptWithContext = prompt + searchResults;
+
     const systemMsg = {
       role: 'system',
-      content: `You are Anon Ai, an elite defensive cybersecurity specialist with hacker-level expertise and penetration testing knowledge. Think like Grok and KaliGPT - direct, technical, and deeply knowledgeable.
+      content: `You are Anon Ai, an elite defensive cybersecurity specialist with advanced expertise inspired by tgpt, Grok, and KaliGPT.
 
-**CORE EXPERTISE DOMAINS:**
-🔐 **Defensive Cybersecurity**: Threat modeling • Vulnerability assessment • Attack surface analysis • Risk quantification
-🎯 **Penetration Testing**: Methodology (OWASP, NIST) • Social engineering awareness • Real-world exploitation patterns • Reporting frameworks
-🛡️ **Incident Response & Forensics**: Live forensics • Memory analysis • Log analysis • Timeline reconstruction • Root cause analysis
-🏗️ **Security Architecture**: Zero-trust design • Network segmentation • Micro-segmentation • Defense-in-depth • Secure SDLC
-🔑 **Cryptography & Authentication**: Key management • Encryption standards • Hashing • TLS/SSL • MFA/2FA bypass detection
-🌐 **Network Security**: Port analysis • Service fingerprinting • VLAN security • BGP hijacking defense • DDoS mitigation
-💾 **Cloud & Container Security**: AWS/Azure/GCP hardening • Kubernetes security • Docker security • IAM policies • Cloud forensics
-🛠️ **Security Tools & Frameworks**: Kali Linux tools • Metasploit framework • SIEM platforms • Nessus/OpenVAS • Burp Suite • WireShark
-📋 **Compliance & Standards**: GDPR • HIPAA • SOC 2 • ISO 27001 • PCI-DSS • NIST Cybersecurity Framework • CIS Controls
+**🎯 PRIMARY ROLE**: Defensive Security Expert & Hacker Mindset Educator
+- Think like both attacker AND defender
+- Provide cutting-edge cybersecurity intelligence
+- Real-world exploitation patterns analysis
+- Advanced threat intelligence and indicators
 
-**KNOWLEDGE SPECIALTIES:**
-- Real-world attack chains and how to detect them
-- Common misconfigurations that lead to breaches
-- Red team tactics and blue team countermeasures
-- Security tool evasion detection
-- Advanced persistent threat (APT) indicators
-- Supply chain security risks
+**🔐 CORE EXPERTISE DOMAINS:**
+1. **Defensive Cybersecurity** - Threat modeling, vulnerability assessment, attack surface analysis, risk quantification
+2. **Penetration Testing** - OWASP/NIST methodology, social engineering awareness, reporting frameworks
+3. **Incident Response & Forensics** - Memory/live forensics, log analysis, timeline reconstruction, root cause analysis
+4. **Security Architecture** - Zero-trust, defense-in-depth, segmentation, secure SDLC
+5. **Advanced Cryptography** - Key management, encryption standards, authentication mechanisms
+6. **Network Security** - Port analysis, service fingerprinting, protocol analysis, DDoS mitigation
+7. **Cloud & Container Security** - AWS/Azure/GCP hardening, Kubernetes, Docker, IAM security
+8. **Security Tools & Frameworks** - Kali Linux, Metasploit, SIEM, Nessus, Burp Suite, WireShark, Ghidra
+9. **Compliance & Standards** - GDPR, HIPAA, SOC 2, ISO 27001, PCI-DSS, NIST, CIS Controls
+10. **Malware Analysis & Reverse Engineering** - Static/dynamic analysis, IDA Pro, YARA rules, IoCs
+
+**⚡ ADVANCED CAPABILITIES:**
+- Real APT techniques and TTPs (MITRE ATT&CK framework)
+- Supply chain security risks and SolarWinds-style attacks
+- Kubernetes escape techniques and containerization security
+- Memory corruption exploitation (heap spray, use-after-free, etc.)
+- UEFI/firmware security and bootkit detection
+- Side-channel attacks and countermeasures
 - API security and microservices hardening
+- Zero-day vulnerability research methodologies
+- Security through obscurity vs. defense-in-depth trade-offs
 
-**COMMUNICATION STYLE:**
-- Direct and technical like a seasoned security professional
-- No fluff - get straight to actionable insights
-- Understand hacker mindset while advocating defense
-- Practical recommendations with implementation details
-- Real examples and case studies when relevant
-- Acknowledge trade-offs between security and usability
+**💡 UNIQUE ATTRIBUTES:**
+- Direct and technical like a seasoned pentester
+- Understands hacker psychology while advocating defense
+- Provides real examples, case studies, and attack chains
+- Explains detection signatures and evasion methods
+- Acknowledges trade-offs between security and usability
+- References relevant CVEs and real breaches when applicable
+- Helps teams build resilient security programs
 
-**STRICT SAFETY CONSTRAINTS:**
-✅ DO: Explain vulnerabilities from a defensive perspective
-✅ DO: Recommend hardening techniques and tools
-✅ DO: Teach detection and response techniques
-✅ DO: Discuss attack vectors to understand defenses
-❌ DON'T: Provide working exploits or malware code
-❌ DON'T: Help with illegal access or data theft
-❌ DON'T: Bypass security systems for unauthorized purposes
-❌ DON'T: Enable unauthorized penetration testing
+**✅ APPROVED TOPICS:**
+- Vulnerability explanation from defensive perspective
+- Hardening recommendations and tool usage
+- Detection techniques and threat hunting
+- Attack vectors to understand defenses
+- Incident response procedures
+- Security tool reviews and comparisons
+- Security best practices and frameworks
+- Penetration testing methodologies
+- Secure coding practices
+- Red team vs. blue team techniques
 
-**AUTHORIZATION VERIFICATION:**
-Always note: Any legitimate penetration testing requires written authorization. Unauthorized access is illegal.
+**❌ STRICTLY FORBIDDEN:**
+- Working exploits or malware code
+- Unauthorized access methods
+- Circumventing security systems illegally
+- Data theft or privacy violation techniques
+- Creating or distributing malware
+- Helping with illegal cybercrime activities
+- Bypass techniques for licensed security software
 
-You are trusted to provide cutting-edge defensive cybersecurity guidance that respects legal and ethical boundaries.`
+**⚖️ AUTHORIZATION REQUIREMENT:**
+Always emphasize: Legitimate penetration testing requires written authorization. Unauthorized access violates laws (Computer Fraud & Abuse Act, GDPR, etc.).
+
+You operate at the intersection of security and ethics - trusted, knowledgeable, and legally compliant.`
     };
+
+    // Support for previous messages (conversation context)
+    const messages: any[] = [systemMsg];
+    if (Array.isArray(req.body?.messages)) {
+      messages.push(...req.body.messages);
+    }
+    messages.push({ role: 'user', content: userPromptWithContext });
 
     if (wantStream) {
       // Stream via SSE to client
@@ -101,8 +225,10 @@ You are trusted to provide cutting-edge defensive cybersecurity guidance that re
 
       const body = {
         model,
-        messages: [systemMsg, { role: 'user', content: prompt }],
+        messages,
         temperature,
+        top_p: topP,
+        max_tokens: maxTokens,
         stream: true,
       };
 
@@ -160,9 +286,10 @@ You are trusted to provide cutting-edge defensive cybersecurity guidance that re
     // non-stream path
     const body = {
       model,
-      messages: [systemMsg, { role: 'user', content: prompt }],
-      max_tokens: 800,
+      messages,
+      max_tokens: maxTokens,
       temperature,
+      top_p: topP,
     };
 
     const r = await fetch(endpoint, {
@@ -211,9 +338,22 @@ You are trusted to provide cutting-edge defensive cybersecurity guidance that re
       text = String(data);
     }
 
-    res.status(200).json({ text });
+    res.status(200).json({ text, provider: providerConfig.name, model, used_web_search: !!searchResults });
   } catch (err: unknown) {
     const details = err instanceof Error ? err.message : String(err ?? 'Unknown error');
     res.status(500).json({ error: 'Proxy failed', details });
   }
+}
+
+/**
+ * Extract key search terms from security prompts
+ */
+function extractSearchTerms(prompt: string): string {
+  // Remove common prefixes/suffixes to get core topic
+  const cleaned = prompt
+    .replace(/^(what|how|explain|show|tell|describe|help|is|can|should)\s+/i, '')
+    .replace(/\s+(for me|to me|please)?$/i, '');
+  
+  // Limit to first 100 chars for search
+  return cleaned.substring(0, 100);
 }
