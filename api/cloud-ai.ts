@@ -26,7 +26,7 @@ interface ProviderConfig {
   apiKey?: string;
   model: string;
   headers: Record<string, string>;
-  bodyModifier?: (body: any) => any;
+  bodyModifier?: (body: Record<string, unknown>) => Record<string, unknown>;
 }
 
 function getProviderConfig(req: RequestBody): ProviderConfig {
@@ -62,9 +62,9 @@ function getProviderConfig(req: RequestBody): ProviderConfig {
       headers: {
         'Content-Type': 'application/json',
       },
-      bodyModifier: (body: any) => ({
+      bodyModifier: (body: Record<string, unknown>) => ({
         contents: [{
-          parts: [{ text: body.messages.map((m: any) => `${m.role}: ${m.content}`).join('\n') }],
+          parts: [{ text: (body.messages as Array<{role: string; content: string}>).map((m) => `${m.role}: ${m.content}`).join('\n') }],
         }],
       }),
     },
@@ -167,7 +167,7 @@ Response:`,
 
     const systemPrompt = reqBody.preprompt || systemPrompts[mode] || systemPrompts.normal;
 
-    const messages: any[] = [];
+    const messages: Array<{ role: string; content: string }> = [];
     
     if (systemPrompt) {
       messages.push({ role: 'system', content: systemPrompt });
@@ -179,7 +179,7 @@ Response:`,
 
     messages.push({ role: 'user', content: prompt });
 
-    let requestBody: any = {
+    let requestBody: Record<string, unknown> = {
       model: provider.model,
       messages,
       temperature: typeof reqBody.temperature === 'number' ? reqBody.temperature : (process.env.TGPT_TEMPERATURE ? Number(process.env.TGPT_TEMPERATURE) : 0.7),
@@ -294,7 +294,7 @@ Response:`,
       text = String(data);
     }
 
-    const responseData: any = { text };
+    const responseData: Record<string, unknown> = { text };
     if (mode !== 'quiet' && mode !== 'whole') {
       responseData.mode = mode;
     }
