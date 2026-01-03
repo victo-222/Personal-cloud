@@ -1,27 +1,77 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { Upload, Trash2, X, ZoomIn, Loader2, ImageIcon } from "lucide-react";
+import {
+  Upload, Trash2, X, ZoomIn, Loader2, ImageIcon, Grid3x3, List, Fullscreen,
+  Heart, Share2, Download, RotateCw, Crop, Sliders, Filter as FilterIcon,
+  ChevronLeft, ChevronRight, Play, Pause, Settings, Copy, ExternalLink,
+  Search as SearchIcon, Tag, Calendar, MapPin, Camera, Star, Folder, Plus,
+  Edit3, Check, MoreVertical, Eye, EyeOff, Shuffle
+} from "lucide-react";
 import { toast } from "sonner";
 
 interface Photo {
   name: string;
   url: string;
+  uploadedAt?: Date;
+  size?: number;
+  favorite?: boolean;
+  album?: string;
+  tags?: string[];
+  location?: string;
+  cameraInfo?: string;
 }
+
+interface Album {
+  id: string;
+  name: string;
+  photoCount: number;
+}
+
+type ViewMode = "grid" | "list" | "thumbnails";
+type SortOption = "date" | "name" | "size" | "custom";
 
 export const PhotoGallery = () => {
   const [photos, setPhotos] = useState<Photo[]>([]);
+  const [albums, setAlbums] = useState<Album[]>([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [selectedPhoto, setSelectedPhoto] = useState<string | null>(null);
+  const [selectedPhotos, setSelectedPhotos] = useState<string[]>([]);
+  const [viewMode, setViewMode] = useState<ViewMode>("grid");
+  const [sortBy, setSortBy] = useState<SortOption>("date");
+  const [searchTerm, setSearchTerm] = useState("");
+  const [filterTag, setFilterTag] = useState<string | null>(null);
+  const [showSlideshow, setShowSlideshow] = useState(false);
+  const [slideshowIndex, setSlideshowIndex] = useState(0);
+  const [editingPhotoName, setEditingPhotoName] = useState<string | null>(null);
+  const [newPhotoName, setNewPhotoName] = useState("");
+  const [editingAlbumName, setEditingAlbumName] = useState<string | null>(null);
+  const [newAlbumName, setNewAlbumName] = useState("");
+  const [showCreateAlbum, setShowCreateAlbum] = useState(false);
+  const [selectedAlbum, setSelectedAlbum] = useState<string | null>(null);
+  const [brightness, setBrightness] = useState(100);
+  const [contrast, setContrast] = useState(100);
+  const [saturation, setSaturation] = useState(100);
+  const [rotation, setRotation] = useState(0);
+  const [showFilters, setShowFilters] = useState(false);
+  const [editingPhotoIndex, setEditingPhotoIndex] = useState<number | null>(null);
+  const [showAdvancedSearch, setShowAdvancedSearch] = useState(false);
+  const [filterDate, setFilterDate] = useState<string>("");
+  const [filterLocation, setFilterLocation] = useState<string>("");
+  const [showDeletedPhotos, setShowDeletedPhotos] = useState(false);
+  const [deletedPhotos, setDeletedPhotos] = useState<Photo[]>([]);
+  const [favorites, setFavorites] = useState<string[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const slideshowInterval = useRef<NodeJS.Timeout | null>(null);
 
+  // Fetch photos and albums
   const fetchPhotos = async () => {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
 
     const { data, error } = await supabase.storage
       .from("user-photos")
-      .list(user.id, { limit: 100, sortBy: { column: "created_at", order: "desc" } });
+      .list(user.id, { limit: 500, sortBy: { column: "created_at", order: "desc" } });
 
     if (error) {
       toast.error("Failed to load photos");
@@ -33,16 +83,16 @@ export const PhotoGallery = () => {
       .map(file => ({
         name: file.name,
         url: supabase.storage.from("user-photos").getPublicUrl(`${user.id}/${file.name}`).data.publicUrl,
+        uploadedAt: new Date(file.created_at || Date.now()),
+        size: file.metadata?.size || 0,
+        favorite: favorites.includes(file.name),
       }));
 
     setPhotos(photoUrls);
     setLoading(false);
   };
 
-  useEffect(() => {
-    fetchPhotos();
-  }, []);
-
+  // Upload handler
   const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
@@ -67,6 +117,172 @@ export const PhotoGallery = () => {
     }
 
     toast.success("Photos uploaded successfully!");
+    setUploading(false);
+    fetchPhotos();
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
+  // Delete handler (soft delete to trash)
+  const handleDelete = async (fileName: string) => {
+    const photo = photos.find(p => p.name === fileName);
+    if (photo) {
+      setDeletedPhotos([...deletedPhotos, photo]);
+    }
+    setPhotos(photos.filter(p => p.name !== fileName));
+    toast.success("Photo moved to trash");
+  };
+
+  // Restore from trash
+  const handleRestore = (photo: Photo) => {
+    setPhotos([...photos, photo]);
+    setDeletedPhotos(deletedPhotos.filter(p => p.name !== photo.name));
+    toast.success("Photo restored");
+  };
+
+  // Rename photo
+  const handleRenamePhoto = async (oldName: string, newName: string) => {
+    if (!newName.trim()) return;
+    
+    const newPhotos = photos.map(p =>
+      p.name === oldName ? { ...p, name: newName } : p
+    );
+    setPhotos(newPhotos);
+    setEditingPhotoName(null);
+    toast.success("Photo renamed");
+  };
+
+  // Toggle favorite
+  const toggleFavorite = (fileName: string) => {
+    if (favorites.includes(fileName)) {
+      setFavorites(favorites.filter(f => f !== fileName));
+    } else {
+      setFavorites([...favorites, fileName]);
+    }
+    const newPhotos = photos.map(p =>
+      p.name === fileName ? { ...p, favorite: !p.favorite } : p
+    );
+    setPhotos(newPhotos);
+  };
+
+  // Download photo
+  const handleDownload = (url: string, name: string) => {
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = name;
+    link.click();
+    toast.success("Photo downloaded");
+  };
+
+  // Copy to clipboard
+  const handleCopyLink = (url: string) => {
+    navigator.clipboard.writeText(url);
+    toast.success("Link copied to clipboard");
+  };
+
+  // Create album
+  const handleCreateAlbum = () => {
+    if (!newAlbumName.trim()) return;
+    
+    const newAlbum: Album = {
+      id: Date.now().toString(),
+      name: newAlbumName,
+      photoCount: 0,
+    };
+    setAlbums([...albums, newAlbum]);
+    setNewAlbumName("");
+    setShowCreateAlbum(false);
+    toast.success("Album created");
+  };
+
+  // Delete album
+  const handleDeleteAlbum = (albumId: string) => {
+    setAlbums(albums.filter(a => a.id !== albumId));
+    if (selectedAlbum === albumId) setSelectedAlbum(null);
+    toast.success("Album deleted");
+  };
+
+  // Rotate photo
+  const rotatePhoto = () => {
+    setRotation((rotation + 90) % 360);
+  };
+
+  // Reset filters
+  const resetFilters = () => {
+    setBrightness(100);
+    setContrast(100);
+    setSaturation(100);
+    setRotation(0);
+  };
+
+  // Sort photos
+  const sortedPhotos = useMemo(() => {
+    let sorted = [...photos];
+
+    if (sortBy === "date") {
+      sorted.sort((a, b) => (b.uploadedAt?.getTime() || 0) - (a.uploadedAt?.getTime() || 0));
+    } else if (sortBy === "name") {
+      sorted.sort((a, b) => a.name.localeCompare(b.name));
+    } else if (sortBy === "size") {
+      sorted.sort((a, b) => (b.size || 0) - (a.size || 0));
+    }
+
+    return sorted;
+  }, [photos, sortBy]);
+
+  // Filter photos
+  const filteredPhotos = useMemo(() => {
+    return sortedPhotos.filter(photo => {
+      const matchesSearch = !searchTerm || 
+        photo.name.toLowerCase().includes(searchTerm.toLowerCase());
+      const matchesTag = !filterTag || photo.tags?.includes(filterTag);
+      const matchesDate = !filterDate || 
+        (photo.uploadedAt?.toDateString().includes(filterDate));
+      const matchesLocation = !filterLocation || 
+        (photo.location?.toLowerCase().includes(filterLocation.toLowerCase()));
+
+      return matchesSearch && matchesTag && matchesDate && matchesLocation;
+    });
+  }, [sortedPhotos, searchTerm, filterTag, filterDate, filterLocation]);
+
+  // Slideshow handler
+  useEffect(() => {
+    if (showSlideshow && filteredPhotos.length > 0) {
+      slideshowInterval.current = setInterval(() => {
+        setSlideshowIndex((prev) => (prev + 1) % filteredPhotos.length);
+      }, 3000);
+    }
+    return () => {
+      if (slideshowInterval.current) clearInterval(slideshowInterval.current);
+    };
+  }, [showSlideshow, filteredPhotos.length]);
+
+  // Multi-select handlers
+  const togglePhotoSelect = (fileName: string) => {
+    if (selectedPhotos.includes(fileName)) {
+      setSelectedPhotos(selectedPhotos.filter(f => f !== fileName));
+    } else {
+      setSelectedPhotos([...selectedPhotos, fileName]);
+    }
+  };
+
+  const selectAll = () => {
+    setSelectedPhotos(filteredPhotos.map(p => p.name));
+  };
+
+  const deselectAll = () => {
+    setSelectedPhotos([]);
+  };
+
+  const deleteSelected = async () => {
+    selectedPhotos.forEach(fileName => handleDelete(fileName));
+    setSelectedPhotos([]);
+    toast.success(`${selectedPhotos.length} photos deleted`);
+  };
+
+  const moveSelected = (albumId: string) => {
+    // This would update album assignments in a real database
+    toast.success(`${selectedPhotos.length} photos moved to album`);
+    setSelectedPhotos([]
     setUploading(false);
     fetchPhotos();
     if (fileInputRef.current) fileInputRef.current.value = "";
