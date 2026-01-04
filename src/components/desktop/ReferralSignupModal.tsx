@@ -40,8 +40,8 @@ export const ReferralSignupModal: React.FC<ReferralSignupModalProps> = ({ isOpen
     try {
       const validation = referralSystemService.validateReferralCode(referralCode);
 
-      if (!validation.isValid) {
-        setValidationError(validation.message);
+      if (!validation.valid) {
+        setValidationError(validation.error || 'Invalid referral code');
         return;
       }
 
