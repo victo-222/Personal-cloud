@@ -69,7 +69,7 @@ export const AuditLogsViewer: React.FC<AuditLogsViewerProps> = ({ isOpen, onClos
     if (!isOpen) return;
 
     const loadLogs = () => {
-      const allLogs = auditLoggingService.getAllLogs?.() || [];
+      const allLogs = auditLoggingService.query({});
       setLogs(allLogs);
       applyFilters(allLogs);
 
@@ -115,7 +115,7 @@ export const AuditLogsViewer: React.FC<AuditLogsViewerProps> = ({ isOpen, onClos
   };
 
   const handleExport = (format: 'json' | 'csv') => {
-    const exported = auditLoggingService.exportLogs?.(filteredLogs, format);
+    const exported = auditLoggingService.exportLogs(format);
     if (!exported) return;
 
     const element = document.createElement('a');
@@ -199,13 +199,13 @@ export const AuditLogsViewer: React.FC<AuditLogsViewerProps> = ({ isOpen, onClos
           <Card className="bg-gray-800 border-gray-700 p-4">
             <div className="space-y-4">
               <div className="flex gap-4">
-                <div className="flex-1">
+                <div className="flex-1 relative">
+                  <Search className="absolute left-3 top-3 w-4 h-4 text-gray-500" />
                   <Input
                     placeholder="Search by user ID, IP, or details..."
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
-                    className="bg-gray-900 border-gray-700 text-white"
-                    icon={<Search className="w-4 h-4" />}
+                    className="bg-gray-900 border-gray-700 text-white pl-10"
                   />
                 </div>
                 <Button

@@ -43,30 +43,27 @@ interface RBACManagementPanelProps {
 
 const PERMISSION_GROUPS: Record<string, Permission[]> = {
   'User Management': [
-    'user_read',
-    'user_write',
-    'user_delete',
-    'user_create',
-    'user_impersonate',
+    'user.read',
+    'user.write',
+    'user.delete',
+    'user.create',
   ],
   'File Operations': [
-    'file_read',
-    'file_write',
-    'file_delete',
-    'file_share',
-    'file_delete_others',
+    'file.read',
+    'file.write',
+    'file.delete',
+    'file.share',
   ],
-  'AI Services': ['ai_access', 'ai_premium', 'ai_admin'],
-  'Settings': ['settings_read', 'settings_write', 'settings_export'],
+  'AI Services': ['ai.access', 'ai.admin'],
+  'Settings': ['settings.read', 'settings.write'],
   'Admin': [
-    'admin_view_logs',
-    'admin_manage_users',
-    'admin_system_config',
-    'admin_backup',
+    'admin.view_logs',
+    'admin.manage_users',
+    'admin.system_config',
   ],
-  'Security': ['security_mfa_enforce', 'security_audit_logs', 'security_encryption'],
-  'Analytics': ['analytics_view_all', 'analytics_export', 'analytics_custom_reports'],
-  'Reporting': ['reporting_generate', 'reporting_view', 'reporting_schedule'],
+  'Security': ['security.mfa_enforce', 'security.audit_logs'],
+  'Analytics': ['analytics.view_all', 'analytics.export'],
+  'Reporting': ['reports.generate', 'reports.view'],
 };
 
 export const RBACManagementPanel: React.FC<RBACManagementPanelProps> = ({ isOpen, onClose }) => {
@@ -93,7 +90,7 @@ export const RBACManagementPanel: React.FC<RBACManagementPanelProps> = ({ isOpen
 
   const handleAssignRole = () => {
     if (selectedUser && selectedRole) {
-      rbacService.assignRole(selectedUser, selectedRole as Role);
+      rbacService.assignRole(selectedUser, selectedRole as Role, 'admin');
       setSelectedUser('');
       setSelectedRole('');
     }
@@ -101,7 +98,7 @@ export const RBACManagementPanel: React.FC<RBACManagementPanelProps> = ({ isOpen
 
   const handleCreateCustomRole = () => {
     if (newRoleName && newRolePermissions.length > 0) {
-      rbacService.createCustomRole(newRoleName as Role, newRolePermissions);
+      rbacService.createCustomRole(newRoleName, newRoleName, `Custom role: ${newRoleName}`, newRolePermissions, 100);
       setNewRoleName('');
       setNewRolePermissions([]);
       setShowCreateRoleDialog(false);
@@ -189,8 +186,8 @@ export const RBACManagementPanel: React.FC<RBACManagementPanelProps> = ({ isOpen
                   <Card key={i} className="bg-gray-800 border-gray-700 p-6">
                     <div className="space-y-4">
                       <div className="flex items-center justify-between">
-                        <h3 className="text-lg font-semibold text-white">{role.name}</h3>
-                        <Badge className={getRoleColor(role.name)}>
+                        <h3 className="text-lg font-semibold text-white">{role.displayName}</h3>
+                        <Badge className={getRoleColor(role.displayName)}>
                           Level {role.hierarchyLevel}
                         </Badge>
                       </div>
@@ -242,14 +239,14 @@ export const RBACManagementPanel: React.FC<RBACManagementPanelProps> = ({ isOpen
 
                   <div>
                     <label className="text-sm text-gray-300 mb-2 block">Select Role</label>
-                    <Select value={selectedRole} onValueChange={setSelectedRole}>
+                    <Select value={selectedRole} onValueChange={(value) => setSelectedRole(value)}>
                       <SelectTrigger className="bg-gray-900 border-gray-700 text-white">
                         <SelectValue placeholder="Choose a role" />
                       </SelectTrigger>
                       <SelectContent className="bg-gray-900 border-gray-700">
                         {allRoles.map((role) => (
-                          <SelectItem key={role.name} value={role.name}>
-                            {role.name} (Level {role.hierarchyLevel})
+                          <SelectItem key={role.role} value={role.role}>
+                            {role.displayName} (Level {role.hierarchyLevel})
                           </SelectItem>
                         ))}
                       </SelectContent>

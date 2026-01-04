@@ -71,8 +71,8 @@ export const UserAnalyticsDashboard: React.FC<UserAnalyticsDashboardProps> = ({
       // Build activity trends
       const trends = metrics.slice(0, 10).map((m) => ({
         userId: m.userId.substring(0, 8) + '...',
-        sessions: m.sessionCount,
-        avgDuration: Math.round(m.avgSessionDuration / 60),
+        sessions: m.sessionsThisWeek,
+        avgDuration: Math.round(m.averageSessionDuration / 60),
         queries: m.aiQueryCount || 0,
       }));
       setChartData(trends);

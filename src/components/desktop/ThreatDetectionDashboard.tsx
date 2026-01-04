@@ -144,7 +144,7 @@ export const ThreatDetectionDashboard: React.FC<ThreatDetectionDashboardProps> =
                 <ul className="space-y-1 text-sm">
                   {criticalThreats.slice(0, 3).map((threat, i) => (
                     <li key={i}>
-                      • {threat.type}: {threat.description} (Severity: {threat.severity})
+                      • {threat.type}: {threat.description} (Level: {threat.level})
                     </li>
                   ))}
                 </ul>
@@ -299,8 +299,8 @@ export const ThreatDetectionDashboard: React.FC<ThreatDetectionDashboardProps> =
                       </td>
                       <td className="px-6 py-3 text-sm text-gray-400">{threat.description}</td>
                       <td className="px-6 py-3 text-sm">
-                        <Badge className={THREAT_LEVEL_COLORS[threat.severity]}>
-                          {threat.severity}
+                        <Badge className={THREAT_LEVEL_COLORS[threat.level]}>
+                          {threat.level}
                         </Badge>
                       </td>
                       <td className="px-6 py-3 text-sm text-gray-400">

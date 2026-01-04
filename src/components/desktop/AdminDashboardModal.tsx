@@ -130,7 +130,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ isOpen, onClose 
                 <div>
                   <p className="text-green-100 text-sm">System Health</p>
                   <p className="text-4xl font-bold text-green-300 mt-2">
-                    {currentMetrics.healthScore}%
+                    {Math.round(100 - (currentMetrics.cpuUsage + currentMetrics.errorRate) / 2)}%
                   </p>
                 </div>
                 <Activity className="w-12 h-12 text-green-400 opacity-50" />
@@ -169,7 +169,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ isOpen, onClose 
                 <ul className="space-y-1 text-sm">
                   {criticalAlerts.slice(0, 3).map((alert, i) => (
                     <li key={i}>
-                      • {alert.resource}: {alert.message}
+                      • {alert.type}: {alert.message}
                     </li>
                   ))}
                 </ul>
@@ -226,7 +226,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ isOpen, onClose 
                   <Clock className="w-4 h-4 text-green-500" />
                 </div>
                 <p className="text-2xl font-bold text-green-400">
-                  {currentMetrics.avgResponseTime}ms
+                  {Math.round(currentMetrics.averageResponseTime)}ms
                 </p>
               </div>
             </div>
@@ -281,7 +281,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ isOpen, onClose 
                     >
                       <div className="flex items-center justify-between">
                         <div>
-                          <p className="font-semibold">{alert.resource}</p>
+                          <p className="font-semibold">{alert.type}</p>
                           <p className="text-sm">{alert.message}</p>
                         </div>
                         <Badge
@@ -334,7 +334,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ isOpen, onClose 
                             {new Date(session.loginTime).toLocaleTimeString()}
                           </td>
                           <td className="px-6 py-4 text-sm text-gray-300">
-                            {new Date(session.lastActivityTime).toLocaleTimeString()}
+                            {new Date(session.lastActivity).toLocaleTimeString()}
                           </td>
                           <td className="px-6 py-4 text-sm">
                             <Badge className="bg-green-600">Active</Badge>
