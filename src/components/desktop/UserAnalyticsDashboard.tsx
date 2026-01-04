@@ -73,7 +73,7 @@ export const UserAnalyticsDashboard: React.FC<UserAnalyticsDashboardProps> = ({
         userId: m.userId.substring(0, 8) + '...',
         sessions: m.sessionsThisWeek,
         avgDuration: Math.round(m.averageSessionDuration / 60),
-        queries: m.aiQueryCount || 0,
+        queries: m.totalAiQueries || 0,
       }));
       setChartData(trends);
     };
@@ -91,7 +91,7 @@ export const UserAnalyticsDashboard: React.FC<UserAnalyticsDashboardProps> = ({
   const totalUsers = allMetrics.length;
   const avgSessionsPerUser =
     totalUsers > 0
-      ? Math.round(allMetrics.reduce((sum, m) => sum + m.sessionCount, 0) / totalUsers)
+      ? Math.round(allMetrics.reduce((sum, m) => sum + m.sessionsThisWeek, 0) / totalUsers)
       : 0;
 
   const getRiskColor = (riskScore: number) => {
@@ -281,16 +281,16 @@ export const UserAnalyticsDashboard: React.FC<UserAnalyticsDashboardProps> = ({
                             {metric.userId.substring(0, 12)}...
                           </td>
                           <td className="px-6 py-3 text-sm text-gray-300">
-                            {metric.sessionCount}
+                            {metric.sessionsThisWeek}
                           </td>
                           <td className="px-6 py-3 text-sm text-gray-300">
-                            {Math.round(metric.avgSessionDuration / 60)} min
+                            {Math.round(metric.averageSessionDuration / 60)} min
                           </td>
                           <td className="px-6 py-3 text-sm text-gray-300">
-                            {metric.aiQueryCount || 0}
+                            {metric.totalAiQueries || 0}
                           </td>
                           <td className="px-6 py-3 text-sm text-gray-400">
-                            {new Date(metric.lastActiveTime).toLocaleDateString()}
+                            {new Date(metric.lastActive).toLocaleDateString()}
                           </td>
                           <td className="px-6 py-3 text-sm">
                             <Button
@@ -332,8 +332,8 @@ export const UserAnalyticsDashboard: React.FC<UserAnalyticsDashboardProps> = ({
                           </p>
                           <div className="flex gap-4 mt-2 text-xs text-gray-400">
                             <span>Risk Score: <span className={getRiskColor(user.riskScore)}>{user.riskScore}</span></span>
-                            <span>Anomalies: {user.anomalyCount || 0}</span>
-                            <span>Failed Activity: {Math.round(user.failedActivityRate * 100)}%</span>
+                            <span>Risk Score: {user.riskScore}/100</span>
+                            <span>Abnormalities: {user.abnormalActivities.length}</span>
                           </div>
                         </div>
                         <Badge className={getComplianceColor(user.complianceScore)}>
@@ -365,19 +365,19 @@ export const UserAnalyticsDashboard: React.FC<UserAnalyticsDashboardProps> = ({
                 <div className="bg-gray-900 p-3 rounded">
                   <p className="text-xs text-gray-400">Total Sessions</p>
                   <p className="text-2xl font-bold text-white mt-1">
-                    {selectedUserMetrics.sessionCount}
+                    {selectedUserMetrics.sessionsThisWeek}
                   </p>
                 </div>
                 <div className="bg-gray-900 p-3 rounded">
                   <p className="text-xs text-gray-400">Avg Duration</p>
                   <p className="text-2xl font-bold text-white mt-1">
-                    {Math.round(selectedUserMetrics.avgSessionDuration / 60)}m
+                    {Math.round(selectedUserMetrics.averageSessionDuration / 60)}m
                   </p>
                 </div>
                 <div className="bg-gray-900 p-3 rounded">
                   <p className="text-xs text-gray-400">Files Uploaded</p>
                   <p className="text-2xl font-bold text-white mt-1">
-                    {selectedUserMetrics.fileOperationCount || 0}
+                    {selectedUserMetrics.totalFileOperations || 0}
                   </p>
                 </div>
               </div>

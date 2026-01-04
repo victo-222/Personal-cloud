@@ -239,7 +239,7 @@ export const RBACManagementPanel: React.FC<RBACManagementPanelProps> = ({ isOpen
 
                   <div>
                     <label className="text-sm text-gray-300 mb-2 block">Select Role</label>
-                    <Select value={selectedRole} onValueChange={(value) => setSelectedRole(value)}>
+                    <Select value={selectedRole || ''} onValueChange={(value) => setSelectedRole(value as Role)}>
                       <SelectTrigger className="bg-gray-900 border-gray-700 text-white">
                         <SelectValue placeholder="Choose a role" />
                       </SelectTrigger>
