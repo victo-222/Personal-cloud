@@ -294,6 +294,8 @@ export class AIPersonalizationService {
       id: `task-${userId}-${Date.now()}`,
       userId,
       title,
+      type: options.type || 'oneoff',
+      priority: options.priority || 'medium',
       scheduledFor,
       status: 'pending',
       autoScheduled: false,
